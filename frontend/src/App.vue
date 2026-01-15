@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import {
   SelectFile,
-  ExtractFromFile,
+  SelectOutputPath,
+  ExtractToPath,
   PreviewData,
 } from "../wailsjs/go/main/App";
+import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 
 interface Record {
   defendant: string;
@@ -22,6 +24,7 @@ interface ExtractResult {
 }
 
 const selectedFile = ref<string>("");
+const outputOutputPath = ref<string>("");
 const fileName = computed(() =>
   selectedFile.value ? selectedFile.value.split("/").pop() : ""
 );
@@ -30,6 +33,37 @@ const result = ref<ExtractResult | null>(null);
 const previewRecords = ref<Record[]>([]);
 const showPreview = ref(false);
 const isDragging = ref(false);
+const notification = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  notification.value = { message, type };
+  setTimeout(() => {
+    notification.value = null;
+  }, 3000);
+}
+
+// Wails 原生拖拽处理
+onMounted(() => {
+  OnFileDrop((x: number, y: number, paths: string[]) => {
+    console.log("OnFileDrop triggered:", { x, y, paths });
+    isDragging.value = false;
+    if (paths && paths.length > 0) {
+      const filePath = paths[0];
+      if (filePath.toLowerCase().endsWith(".docx")) {
+        console.log("Setting file:", filePath);
+        setFile(filePath);
+        showNotification("文件已加载", "success");
+      } else {
+        console.warn("请拖拽 .docx 文件");
+        showNotification("不支持的文件格式，请使用 .docx 文件", "error");
+      }
+    }
+  }, true);
+});
+
+onUnmounted(() => {
+  OnFileDropOff();
+});
 
 async function handleSelectFile() {
   try {
@@ -44,6 +78,7 @@ async function handleSelectFile() {
 
 function setFile(file: string) {
   selectedFile.value = file;
+  outputOutputPath.value = ""; // Reset output path when file changes
   result.value = null;
   previewRecords.value = [];
   showPreview.value = false;
@@ -70,15 +105,37 @@ function onDrop(e: DragEvent) {
   }
 }
 
-async function handleExtract() {
+async function handleSelectOutput() {
   if (!selectedFile.value) return;
+  
+  // Suggest a default name based on input file
+  const baseName = (fileName.value || "document.docx").replace(/\.[^/.]+$/, "") + "_extracted.csv";
+  
+  try {
+    const path = await SelectOutputPath(baseName);
+    if (path) {
+      outputOutputPath.value = path;
+    }
+  } catch (e) {
+    console.error("Output selection failed:", e);
+  }
+}
+
+async function handleExtract() {
+  if (!selectedFile.value || !outputOutputPath.value) return;
 
   isLoading.value = true;
   result.value = null;
 
   try {
-    const res = await ExtractFromFile(selectedFile.value);
+    const res = await ExtractToPath(selectedFile.value, outputOutputPath.value);
+    
     result.value = res;
+    if (res.success) {
+      showNotification("提取成功！已保存至 " + res.outputPath, "success");
+    } else {
+      showNotification(res.errorMessage || "提取失败", "error");
+    }
   } catch (e: any) {
     result.value = {
       success: false,
@@ -115,6 +172,14 @@ async function handlePreview() {
     <!-- Background Decor -->
     <div class="bg-blur-1"></div>
     <div class="bg-blur-2"></div>
+
+    <!-- Notification Toast -->
+    <Transition name="toast">
+      <div v-if="notification" class="toast" :class="notification.type">
+        <span class="toast-icon">{{ notification.type === 'error' ? '⚠️' : notification.type === 'success' ? '✅' : 'ℹ️' }}</span>
+        <span class="toast-message">{{ notification.message }}</span>
+      </div>
+    </Transition>
 
     <main class="main-content">
       <!-- Header -->
@@ -155,10 +220,8 @@ async function handlePreview() {
         <div
           class="drop-zone"
           :class="{ 'is-dragging': isDragging, 'has-file': !!selectedFile }"
+          style="--wails-drop-target: drop"
           @click="handleSelectFile"
-          @dragover.prevent="isDragging = true"
-          @dragleave.prevent="isDragging = false"
-          @drop.prevent="onDrop"
         >
           <div class="drop-content">
             <div class="icon-wrapper">
@@ -175,6 +238,19 @@ async function handlePreview() {
           </div>
         </div>
 
+        <!-- Output Configuration -->
+        <div class="output-config glass-panel" v-if="selectedFile">
+          <div class="config-row">
+            <span class="config-label">导出位置：</span>
+            <div class="path-display" :class="{ 'placeholder': !outputOutputPath }">
+              {{ outputOutputPath || '请选择保存位置...' }}
+            </div>
+            <button class="btn btn-sm btn-secondary" @click="handleSelectOutput">
+              {{ outputOutputPath ? '更改' : '选择' }}
+            </button>
+          </div>
+        </div>
+
         <!-- Actions -->
         <div class="actions" v-if="selectedFile">
           <button
@@ -188,7 +264,8 @@ async function handlePreview() {
           <button
             class="btn btn-primary"
             @click.stop="handleExtract"
-            :disabled="isLoading"
+            :disabled="isLoading || !outputOutputPath"
+            :title="!outputOutputPath ? '请先选择保存位置' : ''"
           >
             <span v-if="isLoading" class="loader"></span>
             <span v-else>🚀 开始提取</span>
@@ -236,11 +313,18 @@ async function handlePreview() {
           </div>
           <div class="table-wrapper">
             <table>
+              <colgroup>
+                <col style="width: 100px" />
+                <col style="width: 180px" />
+                <col style="width: auto" />
+                <col style="width: auto" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>被告</th>
                   <th>身份证号码</th>
                   <th>诉讼请求</th>
+                  <th>事实与理由</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,14 +333,19 @@ async function handlePreview() {
                   :key="index"
                 >
                   <td>
-                    <div class="cell-content">{{ record.defendant }}</div>
+                    <div class="cell-content fixed-text" :title="record.defendant">{{ record.defendant }}</div>
                   </td>
                   <td>
-                    <div class="cell-content">{{ record.idNumber }}</div>
+                    <div class="cell-content fixed-text" :title="record.idNumber">{{ record.idNumber }}</div>
                   </td>
                   <td>
                     <div class="cell-content truncate" :title="record.request">
                       {{ record.request }}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="cell-content truncate" :title="record.factsReason">
+                      {{ record.factsReason }}
                     </div>
                   </td>
                 </tr>
@@ -395,10 +484,11 @@ async function handlePreview() {
 }
 
 .drop-zone:hover,
-.drop-zone.is-dragging {
+.drop-zone.is-dragging,
+.drop-zone.wails-drop-target-active {
   border-color: var(--accent-primary);
   background: rgba(59, 130, 246, 0.05);
-  transform: scale-[1.01];
+  transform: scale(1.01);
 }
 
 .drop-zone.has-file {
@@ -611,6 +701,7 @@ async function handlePreview() {
 table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed; /* Enforce fixed column widths */
 }
 
 th {
@@ -623,20 +714,33 @@ th {
   position: sticky;
   top: 0;
   backdrop-filter: blur(10px);
+  z-index: 10;
+  white-space: nowrap;
 }
 
 td {
   padding: var(--spacing-sm);
   border-bottom: 1px solid var(--surface-border);
   font-size: 0.9rem;
+  vertical-align: middle;
 }
 
 tr:hover td {
   background: rgba(255, 255, 255, 0.02);
 }
 
+.cell-content {
+  width: 100%;
+}
+
+.fixed-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .truncate {
-  max-width: 250px;
+  width: 100%;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -690,5 +794,102 @@ tr:hover td {
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* Toast Notification */
+.toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 41, 59, 0.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--surface-border);
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  min-width: 300px;
+  justify-content: center;
+}
+
+.toast.success {
+  border-color: var(--success);
+}
+
+.toast.error {
+  border-color: var(--error);
+}
+
+.toast-icon {
+  font-size: 1.2rem;
+}
+
+.toast-message {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* Output Config */
+.output-config {
+  padding: var(--spacing-md);
+  border-radius: var(--radius-lg);
+  margin-top: -10px; /* Slight overlap for visual grouping or separate it if preferred */
+  margin-bottom: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.config-label {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.path-display {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.path-display.placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.btn-sm {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  min-width: unset;
+}
+
+
+/* Toast Animation */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
 }
 </style>

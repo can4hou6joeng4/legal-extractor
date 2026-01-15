@@ -3,10 +3,12 @@
 import {main} from '../models';
 import {extractor} from '../models';
 
-export function ExtractFromFile(arg1:string):Promise<main.ExtractResult>;
+export function ExtractToPath(arg1:string,arg2:string):Promise<main.ExtractResult>;
 
 export function PreviewData(arg1:string):Promise<main.ExtractResult>;
 
 export function SaveToPath(arg1:Array<extractor.Record>):Promise<main.ExtractResult>;
 
 export function SelectFile():Promise<string>;
+
+export function SelectOutputPath(arg1:string):Promise<string>;
