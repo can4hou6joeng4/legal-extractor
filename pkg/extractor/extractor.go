@@ -3,6 +3,7 @@ package extractor
 import (
 	"archive/zip"
 	"encoding/csv"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -222,4 +223,17 @@ func ExportCSV(path string, records []Record) error {
 		}
 	}
 	return writeCSV(path, data)
+}
+
+// ExportJSON exports records to a JSON file
+func ExportJSON(path string, records []Record) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(records)
 }

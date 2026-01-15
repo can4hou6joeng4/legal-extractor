@@ -28,6 +28,13 @@ func main() {
 		Bind: []interface{}{
 			app,
 		},
+		// 启用原生拖拽支持
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:       true,
+			DisableWebViewDrop:   true,
+			CSSDropProperty:      "--wails-drop-target",
+			CSSDropValue:         "drop",
+		},
 	})
 
 	if err != nil {
