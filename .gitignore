@@ -4,3 +4,8 @@ frontend/dist
 
 .agent
 .shared
+.gemini
+
+*.docx
+*.pdf
+*.csv

@@ -382,7 +382,7 @@ async function handlePreview() {
   height: 50vw;
   background: radial-gradient(
     circle,
-    rgba(59, 130, 246, 0.15) 0%,
+    var(--accent-glow) 0%,
     transparent 70%
   );
   filter: blur(80px);
@@ -398,7 +398,7 @@ async function handlePreview() {
   height: 60vw;
   background: radial-gradient(
     circle,
-    rgba(139, 92, 246, 0.15) 0%,
+    var(--accent-secondary-glow) 0%,
     transparent 70%
   );
   filter: blur(80px);
@@ -487,14 +487,14 @@ async function handlePreview() {
 .drop-zone.is-dragging,
 .drop-zone.wails-drop-target-active {
   border-color: var(--accent-primary);
-  background: rgba(59, 130, 246, 0.05);
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
   transform: scale(1.01);
 }
 
 .drop-zone.has-file {
   border-style: solid;
-  background: rgba(59, 130, 246, 0.08);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
 }
 
 .drop-content {
@@ -519,7 +519,7 @@ async function handlePreview() {
 
 .drop-zone:hover .icon-wrapper {
   transform: translateY(-5px) scale(1.1);
-  background: rgba(59, 130, 246, 0.2);
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
 }
 
 .text-content h3 {
@@ -582,12 +582,12 @@ async function handlePreview() {
     var(--accent-secondary)
   );
   color: white;
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--accent-primary) 40%, transparent);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
+  box-shadow: 0 8px 25px color-mix(in srgb, var(--accent-primary) 50%, transparent);
 }
 
 .btn-secondary {
@@ -802,7 +802,7 @@ tr:hover td {
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(30, 41, 59, 0.9);
+  background: var(--glass-bg);
   backdrop-filter: blur(12px);
   border: 1px solid var(--surface-border);
   padding: 12px 24px;
