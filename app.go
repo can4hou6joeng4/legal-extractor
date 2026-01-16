@@ -157,37 +157,3 @@ func (a *App) PreviewData(inputPath string) ExtractResult {
 		Records:     records,
 	}
 }
-
-// SaveToPath allows user to choose output location
-func (a *App) SaveToPath(records []extractor.Record) ExtractResult {
-	file, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "Save Extraction Results",
-		DefaultFilename: "extraction_result.csv",
-		Filters: []runtime.FileFilter{
-			{
-				DisplayName: "CSV Files (*.csv)",
-				Pattern:     "*.csv",
-			},
-		},
-	})
-	if err != nil || file == "" {
-		return ExtractResult{
-			Success:      false,
-			ErrorMessage: "Save cancelled",
-		}
-	}
-
-	err = extractor.ExportCSV(file, records)
-	if err != nil {
-		return ExtractResult{
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("Save failed: %v", err),
-		}
-	}
-
-	return ExtractResult{
-		Success:     true,
-		RecordCount: len(records),
-		OutputPath:  file,
-	}
-}

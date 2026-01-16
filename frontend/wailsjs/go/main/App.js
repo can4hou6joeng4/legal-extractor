@@ -10,10 +10,6 @@ export function PreviewData(arg1) {
   return window['go']['main']['App']['PreviewData'](arg1);
 }
 
-export function SaveToPath(arg1) {
-  return window['go']['main']['App']['SaveToPath'](arg1);
-}
-
 export function SelectFile() {
   return window['go']['main']['App']['SelectFile']();
 }

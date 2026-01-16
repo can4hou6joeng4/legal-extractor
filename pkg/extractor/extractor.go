@@ -29,6 +29,28 @@ func SetMCPConfig(bin string, args []string) {
 	mcpArgs = args
 }
 
+// ExtractionPatterns holds the regex patterns used for parsing
+type ExtractionPatterns struct {
+	Split       *regexp.Regexp
+	DefStart    *regexp.Regexp
+	DefEnd      *regexp.Regexp
+	DefFallback *regexp.Regexp
+	ID          *regexp.Regexp
+	Request     *regexp.Regexp
+	Facts       *regexp.Regexp
+}
+
+// DefaultPatterns defines the standard patterns for legal documents
+var DefaultPatterns = ExtractionPatterns{
+	Split:       regexp.MustCompile(`民\s*事\s*起\s*诉\s*状`),
+	DefStart:    regexp.MustCompile(`被\s*告\s*[:：]`),
+	DefEnd:      regexp.MustCompile(`[,，、\s]+(?:性\s*别|生\s*日|身\s*份\s*证|住\s*址|联\s*系\s*电\s*话)|\n|$`),
+	DefFallback: regexp.MustCompile(`被\s*告\s*[:：]\s*(.*?)\n`),
+	ID:          regexp.MustCompile(`身\s*份\s*证\s*号\s*码\s*[:：]\s*([\dX]+)`),
+	Request:     regexp.MustCompile(`(?s)诉\s*讼\s*请\s*求\s*[:：]\s*(.*?)\s*事\s*实\s*与\s*理\s*由`),
+	Facts:       regexp.MustCompile(`(?s)事\s*实\s*与\s*理\s*由\s*[:：]\s*(.*?)\s*此\s*致`),
+}
+
 // Record represents a single extracted case
 type Record struct {
 	Defendant   string `json:"defendant"`
@@ -206,8 +228,7 @@ func extractTextFromPDF(path string) (string, error) {
 }
 
 func parseCases(text string) []map[string]string {
-	reSplit := regexp.MustCompile(`民\s*事\s*起\s*诉\s*状`)
-	parts := reSplit.Split(text, -1)
+	parts := DefaultPatterns.Split.Split(text, -1)
 
 	var data []map[string]string
 
@@ -219,15 +240,13 @@ func parseCases(text string) []map[string]string {
 		record := make(map[string]string)
 
 		// 1. Extract Defendant
-		reDefStart := regexp.MustCompile(`被\s*告\s*[:：]`)
-		loc := reDefStart.FindStringIndex(part)
+		loc := DefaultPatterns.DefStart.FindStringIndex(part)
 
 		if loc != nil {
 			startIdx := loc[1]
 			remaining := part[startIdx:]
 
-			reKeywords := regexp.MustCompile(`[,，、\s]+(?:性\s*别|生\s*日|身\s*份\s*证|住\s*址|联\s*系\s*电\s*话)|\n|$`)
-			locEnd := reKeywords.FindStringIndex(remaining)
+			locEnd := DefaultPatterns.DefEnd.FindStringIndex(remaining)
 
 			var name string
 			if locEnd != nil {
@@ -240,30 +259,26 @@ func parseCases(text string) []map[string]string {
 			}
 			record["被告"] = strings.Trim(name, " ,，、:：\n\t")
 		} else {
-			reDefFallback := regexp.MustCompile(`被\s*告\s*[:：]\s*(.*?)\n`)
-			match := reDefFallback.FindStringSubmatch(part)
+			match := DefaultPatterns.DefFallback.FindStringSubmatch(part)
 			if len(match) > 1 {
 				record["被告"] = strings.TrimSpace(match[1])
 			}
 		}
 
 		// 2. Extract ID
-		reID := regexp.MustCompile(`身\s*份\s*证\s*号\s*码\s*[:：]\s*([\dX]+)`)
-		matchID := reID.FindStringSubmatch(part)
+		matchID := DefaultPatterns.ID.FindStringSubmatch(part)
 		if len(matchID) > 1 {
 			record["身份证号码"] = strings.TrimSpace(matchID[1])
 		}
 
 		// 3. Extract Request
-		reReq := regexp.MustCompile(`(?s)诉\s*讼\s*请\s*求\s*[:：]\s*(.*?)\s*事\s*实\s*与\s*理\s*由`)
-		matchReq := reReq.FindStringSubmatch(part)
+		matchReq := DefaultPatterns.Request.FindStringSubmatch(part)
 		if len(matchReq) > 1 {
 			record["诉讼请求"] = smartMerge(matchReq[1])
 		}
 
 		// 4. Extract Facts
-		reFact := regexp.MustCompile(`(?s)事\s*实\s*与\s*理\s*由\s*[:：]\s*(.*?)\s*此\s*致`)
-		matchFact := reFact.FindStringSubmatch(part)
+		matchFact := DefaultPatterns.Facts.FindStringSubmatch(part)
 		if len(matchFact) > 1 {
 			record["事实与理由"] = smartMerge(matchFact[1])
 		}

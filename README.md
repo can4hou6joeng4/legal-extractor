@@ -98,6 +98,27 @@ wails build -platform darwin/amd64
 
 ---
 
+## ⚙️ OCR 配置 (可选)
+
+本项目支持通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 集成 OCR 能力，用于处理扫描版 PDF 或图片 PDF。
+
+如需启用 OCR，请在项目根目录下创建 `config/conf.yaml` 文件，配置如下：
+
+```yaml
+mcp:
+  bin: "npx"  # MCP 服务启动命令
+  args:       # 命令参数
+    - "-y"
+    - "@modelcontextprotocol/server-ocr"
+```
+
+**说明**:
+
+- 如果未配置或配置无效，将自动回退到原生文本提取模式。
+- 确保运行环境已安装配置中指定的依赖（如 Node.js/npx）。
+
+---
+
 ## 📁 项目结构
 
 ```
