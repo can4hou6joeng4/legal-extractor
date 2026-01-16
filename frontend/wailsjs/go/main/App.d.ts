@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function ExtractToPath(arg1:string,arg2:string):Promise<main.ExtractResult>;
 
+export function OpenFile(arg1:string):Promise<void>;
+
 export function PreviewData(arg1:string):Promise<main.ExtractResult>;
 
 export function SelectFile():Promise<string>;

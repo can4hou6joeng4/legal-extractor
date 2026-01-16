@@ -5,6 +5,7 @@ import {
   SelectOutputPath,
   ExtractToPath,
   PreviewData,
+  OpenFile,
 } from "../wailsjs/go/main/App";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 
@@ -123,7 +124,7 @@ async function handleSelectOutput() {
   const ext = selectedFormat.value;
   const baseName =
     (fileName.value || "document.doc").replace(/\.[^/.]+$/, "") +
-    "_extracted." +
+    "." +
     ext;
 
   try {
@@ -169,6 +170,15 @@ async function handleExtract() {
   }
 }
 
+async function handleOpenFile(path: string) {
+  if (!path) return;
+  try {
+    await OpenFile(path);
+  } catch (e) {
+    console.error("Failed to open file:", e);
+    showNotification("无法打开文件", "error");
+  }
+}
 async function handlePreview() {
   if (!selectedFile.value) return;
 
@@ -336,7 +346,7 @@ async function handlePreview() {
             </div>
             <div class="path-box">
               <span class="label">保存至：</span>
-              <code>{{ result.outputPath }}</code>
+              <code @click="handleOpenFile(result.outputPath)" class="clickable-path" title="点击打开文件">{{ result.outputPath }}</code>
             </div>
           </div>
           <div v-else class="result-body">
@@ -716,6 +726,16 @@ async function handlePreview() {
 .path-box code {
   color: var(--accent-primary);
   word-break: break-all;
+}
+
+.clickable-path {
+  cursor: pointer;
+  text-decoration: underline;
+  transition: opacity 0.2s;
+}
+
+.clickable-path:hover {
+  opacity: 0.8;
 }
 
 .error-msg {

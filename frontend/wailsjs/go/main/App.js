@@ -6,6 +6,10 @@ export function ExtractToPath(arg1, arg2) {
   return window['go']['main']['App']['ExtractToPath'](arg1, arg2);
 }
 
+export function OpenFile(arg1) {
+  return window['go']['main']['App']['OpenFile'](arg1);
+}
+
 export function PreviewData(arg1) {
   return window['go']['main']['App']['PreviewData'](arg1);
 }

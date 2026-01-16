@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"legal-extractor/pkg/extractor"
 
-	"github.com/wailsapp/wails/v2/pkg/runtime"
+	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -27,9 +29,9 @@ func (a *App) startup(ctx context.Context) {
 
 // SelectFile opens a file dialog to select a .docx file
 func (a *App) SelectFile() (string, error) {
-	file, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+	file, err := wr.OpenFileDialog(a.ctx, wr.OpenDialogOptions{
 		Title: "Select Legal Document (.docx)",
-		Filters: []runtime.FileFilter{
+		Filters: []wr.FileFilter{
 			{
 				DisplayName: "Legal Documents (*.docx;*.pdf)",
 				Pattern:     "*.docx;*.pdf",
@@ -61,10 +63,10 @@ func (a *App) SelectOutputPath(defaultName string) (string, error) {
 	// but mostly we trust the caller or just use a generic name.
 	// Actually, best to let frontend pass the input filename so we can suggest input_extracted.csv
 
-	outputFile, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+	outputFile, err := wr.SaveFileDialog(a.ctx, wr.SaveDialogOptions{
 		Title:           "Select Output Location",
 		DefaultFilename: defaultName,
-		Filters: []runtime.FileFilter{
+		Filters: []wr.FileFilter{
 			{
 				DisplayName: "Excel Files (*.xlsx)",
 				Pattern:     "*.xlsx",
@@ -156,4 +158,18 @@ func (a *App) PreviewData(inputPath string) ExtractResult {
 		RecordCount: len(records),
 		Records:     records,
 	}
+}
+
+// OpenFile opens the file at the given path using the system's default application
+func (a *App) OpenFile(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", path)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", "", path)
+	default:
+		cmd = exec.Command("xdg-open", path)
+	}
+	return cmd.Start()
 }
