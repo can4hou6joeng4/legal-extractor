@@ -24,6 +24,7 @@ interface ExtractResult {
 }
 
 const selectedFile = ref<string>("");
+const selectedFormat = ref<"xlsx" | "csv" | "json">("xlsx");
 const outputOutputPath = ref<string>("");
 const fileName = computed(() =>
   selectedFile.value ? selectedFile.value.split("/").pop() : ""
@@ -33,9 +34,15 @@ const result = ref<ExtractResult | null>(null);
 const previewRecords = ref<Record[]>([]);
 const showPreview = ref(false);
 const isDragging = ref(false);
-const notification = ref<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+const notification = ref<{
+  message: string;
+  type: "success" | "error" | "info";
+} | null>(null);
 
-function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+function showNotification(
+  message: string,
+  type: "success" | "error" | "info" = "info"
+) {
   notification.value = { message, type };
   setTimeout(() => {
     notification.value = null;
@@ -49,13 +56,17 @@ onMounted(() => {
     isDragging.value = false;
     if (paths && paths.length > 0) {
       const filePath = paths[0];
-      if (filePath.toLowerCase().endsWith(".docx")) {
+      const lowerPath = filePath.toLowerCase();
+      if (lowerPath.endsWith(".docx") || lowerPath.endsWith(".pdf")) {
         console.log("Setting file:", filePath);
         setFile(filePath);
         showNotification("文件已加载", "success");
       } else {
-        console.warn("请拖拽 .docx 文件");
-        showNotification("不支持的文件格式，请使用 .docx 文件", "error");
+        console.warn("请拖拽 .docx 或 .pdf 文件");
+        showNotification(
+          "不支持的文件格式，请使用 .docx 或 .pdf 文件",
+          "error"
+        );
       }
     }
   }, true);
@@ -107,14 +118,24 @@ function onDrop(e: DragEvent) {
 
 async function handleSelectOutput() {
   if (!selectedFile.value) return;
-  
-  // Suggest a default name based on input file
-  const baseName = (fileName.value || "document.docx").replace(/\.[^/.]+$/, "") + "_extracted.csv";
-  
+
+  // Suggest a default name based on input file and selected format
+  const ext = selectedFormat.value;
+  const baseName =
+    (fileName.value || "document.doc").replace(/\.[^/.]+$/, "") +
+    "_extracted." +
+    ext;
+
   try {
     const path = await SelectOutputPath(baseName);
     if (path) {
       outputOutputPath.value = path;
+      // Auto update format selection if user picked a different extension
+      if (path.toLowerCase().endsWith(".json")) selectedFormat.value = "json";
+      else if (path.toLowerCase().endsWith(".csv"))
+        selectedFormat.value = "csv";
+      else if (path.toLowerCase().endsWith(".xlsx"))
+        selectedFormat.value = "xlsx";
     }
   } catch (e) {
     console.error("Output selection failed:", e);
@@ -129,7 +150,7 @@ async function handleExtract() {
 
   try {
     const res = await ExtractToPath(selectedFile.value, outputOutputPath.value);
-    
+
     result.value = res;
     if (res.success) {
       showNotification("提取成功！已保存至 " + res.outputPath, "success");
@@ -176,7 +197,13 @@ async function handlePreview() {
     <!-- Notification Toast -->
     <Transition name="toast">
       <div v-if="notification" class="toast" :class="notification.type">
-        <span class="toast-icon">{{ notification.type === 'error' ? '⚠️' : notification.type === 'success' ? '✅' : 'ℹ️' }}</span>
+        <span class="toast-icon">{{
+          notification.type === "error"
+            ? "⚠️"
+            : notification.type === "success"
+            ? "✅"
+            : "ℹ️"
+        }}</span>
         <span class="toast-message">{{ notification.message }}</span>
       </div>
     </Transition>
@@ -211,7 +238,7 @@ async function handlePreview() {
         <h1 class="title">
           法律文书<span class="text-gradient-brand">智能提取</span>
         </h1>
-        <p class="subtitle">高效、精准的 .docx 数据提取工具</p>
+        <p class="subtitle">高效、精准的 .docx / .pdf 数据提取工具</p>
       </header>
 
       <!-- Main Action Area -->
@@ -231,7 +258,9 @@ async function handlePreview() {
             <div class="text-content">
               <h3 v-if="!selectedFile">点击或拖拽上传文件</h3>
               <h3 v-else>{{ fileName }}</h3>
-              <p v-if="!selectedFile" class="hint">支持 .docx 格式法律文书</p>
+              <p v-if="!selectedFile" class="hint">
+                支持 .docx / .pdf 格式法律文书
+              </p>
               <p v-else class="hint file-path">{{ selectedFile }}</p>
             </div>
             <div v-if="selectedFile" class="change-file-btn">更换</div>
@@ -241,12 +270,27 @@ async function handlePreview() {
         <!-- Output Configuration -->
         <div class="output-config glass-panel" v-if="selectedFile">
           <div class="config-row">
+            <span class="config-label">导出格式：</span>
+            <select v-model="selectedFormat" class="format-select">
+              <option value="xlsx">Excel 表格 (.xlsx)</option>
+              <option value="csv">CSV 文件 (.csv)</option>
+              <option value="json">JSON 数据 (.json)</option>
+            </select>
+          </div>
+          <div class="divider"></div>
+          <div class="config-row">
             <span class="config-label">导出位置：</span>
-            <div class="path-display" :class="{ 'placeholder': !outputOutputPath }">
-              {{ outputOutputPath || '请选择保存位置...' }}
+            <div
+              class="path-display"
+              :class="{ placeholder: !outputOutputPath }"
+            >
+              {{ outputOutputPath || "请选择保存位置..." }}
             </div>
-            <button class="btn btn-sm btn-secondary" @click="handleSelectOutput">
-              {{ outputOutputPath ? '更改' : '选择' }}
+            <button
+              class="btn btn-sm btn-secondary"
+              @click="handleSelectOutput"
+            >
+              {{ outputOutputPath ? "更改" : "选择" }}
             </button>
           </div>
         </div>
@@ -333,10 +377,20 @@ async function handlePreview() {
                   :key="index"
                 >
                   <td>
-                    <div class="cell-content fixed-text" :title="record.defendant">{{ record.defendant }}</div>
+                    <div
+                      class="cell-content fixed-text"
+                      :title="record.defendant"
+                    >
+                      {{ record.defendant }}
+                    </div>
                   </td>
                   <td>
-                    <div class="cell-content fixed-text" :title="record.idNumber">{{ record.idNumber }}</div>
+                    <div
+                      class="cell-content fixed-text"
+                      :title="record.idNumber"
+                    >
+                      {{ record.idNumber }}
+                    </div>
                   </td>
                   <td>
                     <div class="cell-content truncate" :title="record.request">
@@ -344,7 +398,10 @@ async function handlePreview() {
                     </div>
                   </td>
                   <td>
-                    <div class="cell-content truncate" :title="record.factsReason">
+                    <div
+                      class="cell-content truncate"
+                      :title="record.factsReason"
+                    >
                       {{ record.factsReason }}
                     </div>
                   </td>
@@ -380,11 +437,7 @@ async function handlePreview() {
   left: -10%;
   width: 50vw;
   height: 50vw;
-  background: radial-gradient(
-    circle,
-    var(--accent-glow) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
   filter: blur(80px);
   z-index: -1;
   pointer-events: none;
@@ -582,12 +635,14 @@ async function handlePreview() {
     var(--accent-secondary)
   );
   color: white;
-  box-shadow: 0 4px 15px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  box-shadow: 0 4px 15px
+    color-mix(in srgb, var(--accent-primary) 40%, transparent);
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  box-shadow: 0 8px 25px
+    color-mix(in srgb, var(--accent-primary) 50%, transparent);
 }
 
 .btn-secondary {
@@ -855,6 +910,59 @@ tr:hover td {
   white-space: nowrap;
 }
 
+.format-select {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.format-select:hover {
+  border-color: var(--accent-primary);
+}
+
+.format-select option {
+  background: #1e1e1e; /* Dark theme assumption */
+  color: white;
+}
+
+.divider {
+  height: 1px;
+  background: var(--surface-border);
+  margin: var(--spacing-sm) 0;
+  opacity: 0.5;
+}
+
+.path-display {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid var(--surface-border);
+}
+
+.path-display.placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.btn-sm {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  min-width: auto;
+}
+
 .path-display {
   flex: 1;
   background: rgba(0, 0, 0, 0.2);
@@ -879,7 +987,6 @@ tr:hover td {
   font-size: 0.9rem;
   min-width: unset;
 }
-
 
 /* Toast Animation */
 .toast-enter-active,
