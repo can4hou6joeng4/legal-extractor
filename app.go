@@ -31,8 +31,8 @@ func (a *App) SelectFile() (string, error) {
 		Title: "Select Legal Document (.docx)",
 		Filters: []runtime.FileFilter{
 			{
-				DisplayName: "Word Documents (*.docx)",
-				Pattern:     "*.docx",
+				DisplayName: "Legal Documents (*.docx;*.pdf)",
+				Pattern:     "*.docx;*.pdf",
 			},
 		},
 	})
@@ -65,6 +65,10 @@ func (a *App) SelectOutputPath(defaultName string) (string, error) {
 		Title:           "Select Output Location",
 		DefaultFilename: defaultName,
 		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "Excel Files (*.xlsx)",
+				Pattern:     "*.xlsx",
+			},
 			{
 				DisplayName: "CSV Files (*.csv)",
 				Pattern:     "*.csv",
@@ -110,6 +114,8 @@ func (a *App) ExtractToPath(inputPath, outputPath string) ExtractResult {
 	// 2. Save based on extension
 	if strings.HasSuffix(strings.ToLower(outputPath), ".json") {
 		err = extractor.ExportJSON(outputPath, records)
+	} else if strings.HasSuffix(strings.ToLower(outputPath), ".xlsx") {
+		err = extractor.ExportExcel(outputPath, records)
 	} else {
 		err = extractor.ExportCSV(outputPath, records)
 	}
