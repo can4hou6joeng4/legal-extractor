@@ -258,14 +258,14 @@ func parseCases(text string) []map[string]string {
 		reReq := regexp.MustCompile(`(?s)诉\s*讼\s*请\s*求\s*[:：]\s*(.*?)\s*事\s*实\s*与\s*理\s*由`)
 		matchReq := reReq.FindStringSubmatch(part)
 		if len(matchReq) > 1 {
-			record["诉讼请求"] = strings.TrimSpace(matchReq[1])
+			record["诉讼请求"] = smartMerge(matchReq[1])
 		}
 
 		// 4. Extract Facts
 		reFact := regexp.MustCompile(`(?s)事\s*实\s*与\s*理\s*由\s*[:：]\s*(.*?)\s*此\s*致`)
 		matchFact := reFact.FindStringSubmatch(part)
 		if len(matchFact) > 1 {
-			record["事实与理由"] = strings.TrimSpace(matchFact[1])
+			record["事实与理由"] = smartMerge(matchFact[1])
 		}
 
 		if record["被告"] != "" || record["身份证号码"] != "" {
@@ -273,6 +273,50 @@ func parseCases(text string) []map[string]string {
 		}
 	}
 	return data
+}
+
+// smartMerge 智能合并换行符
+// 逻辑：保留句号、分号、冒号后的换行，或者新条目序号（如“二、”）之前的换行，其他的换行符视作布局造成的干扰并予以合并。
+func smartMerge(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+
+	// 1. 标准化换行符
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	reMultipleNL := regexp.MustCompile(`\n+`)
+	s = reMultipleNL.ReplaceAllString(s, "\n")
+
+	// 2. 标记需要保留的“逻辑断点”
+	// A. 句末标点后：。；？！
+	rePreserveAfter := regexp.MustCompile(`([。；？！])\n`)
+	s = rePreserveAfter.ReplaceAllString(s, "$1[LOGICAL_NL]")
+
+	// B. 条目序号前：\n一、 \n(1) 等
+	rePreserveBefore := regexp.MustCompile(`\n(\s*(?:[一二三四五六七八九十\d]+[、．]|[(（][一二三四五六七八九十\d]+[)）]))`)
+	s = rePreserveBefore.ReplaceAllString(s, "[LOGICAL_NL]$1")
+
+	// 3. 将剩余的所有普通换行符替换为空格（彻底合并）
+	s = strings.ReplaceAll(s, "\n", "")
+
+	// 4. 将占位符还原为真正的换行
+	s = strings.ReplaceAll(s, "[LOGICAL_NL]", "\n")
+
+	// 5. 深度清理：合并每行内部的多余空格，并去除字词间的冗余
+	lines := strings.Split(s, "\n")
+	var resultLines []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		// 将行内多余空格合并并剔除
+		fields := strings.Fields(trimmed)
+		resultLines = append(resultLines, strings.Join(fields, ""))
+	}
+
+	return strings.Join(resultLines, "\n")
 }
 
 func writeCSV(path string, data []map[string]string) error {
