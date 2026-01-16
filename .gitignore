@@ -9,3 +9,5 @@ frontend/dist
 *.docx
 *.pdf
 *.csv
+# System Files
+.DS_Store
