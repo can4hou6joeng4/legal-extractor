@@ -7,10 +7,27 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"legal-extractor/pkg/mcp"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/ledongthuc/pdf"
+	"github.com/xuri/excelize/v2"
 )
+
+// MCP Config storage
+var (
+	mcpBin  string
+	mcpArgs []string
+)
+
+// SetMCPConfig sets the configuration for the MCP client
+func SetMCPConfig(bin string, args []string) {
+	mcpBin = bin
+	mcpArgs = args
+}
 
 // Record represents a single extracted case
 type Record struct {
@@ -22,8 +39,18 @@ type Record struct {
 
 // ProcessFile extracts text from a docx and writes it to a CSV
 func ProcessFile(inputFile, outputFile string) (int, error) {
-	// 1. Extract Text from Docx
-	text, err := extractTextFromDocx(inputFile)
+	// 1. Extract Text
+	var text string
+	var err error
+	ext := strings.ToLower(filepath.Ext(inputFile))
+	if ext == ".docx" {
+		text, err = extractTextFromDocx(inputFile)
+	} else if ext == ".pdf" {
+		text, err = extractTextFromPDF(inputFile)
+	} else {
+		return 0, fmt.Errorf("unsupported file extension: %s", ext)
+	}
+
 	if err != nil {
 		return 0, fmt.Errorf("error extracting text: %w", err)
 	}
@@ -42,7 +69,18 @@ func ProcessFile(inputFile, outputFile string) (int, error) {
 
 // ExtractData extracts records from a docx file and returns them
 func ExtractData(inputFile string) ([]Record, error) {
-	text, err := extractTextFromDocx(inputFile)
+	var text string
+	var err error
+
+	ext := strings.ToLower(filepath.Ext(inputFile))
+	if ext == ".docx" {
+		text, err = extractTextFromDocx(inputFile)
+	} else if ext == ".pdf" {
+		text, err = extractTextFromPDF(inputFile)
+	} else {
+		return nil, fmt.Errorf("unsupported file extension: %s", ext)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("error extracting text: %w", err)
 	}
@@ -110,6 +148,63 @@ func extractTextFromDocx(path string) (string, error) {
 	return sb.String(), nil
 }
 
+func extractTextFromPDF(path string) (string, error) {
+	// 1. Try Native Text Extraction
+	f, r, err := pdf.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	var collectedText strings.Builder
+	totalPage := r.NumPage()
+
+	for pageIndex := 1; pageIndex <= totalPage; pageIndex++ {
+		p := r.Page(pageIndex)
+		if p.V.IsNull() {
+			continue
+		}
+		text, err := p.GetPlainText(nil)
+		if err == nil {
+			collectedText.WriteString(text)
+		}
+	}
+
+	fullText := collectedText.String()
+
+	// 2. Check if text is sufficient. If not, try OCR via MCP.
+	// Threshold: < 50 chars suggests it might be a scanned image or empty
+	if len(strings.TrimSpace(fullText)) < 50 {
+		fmt.Println("Text extraction yielded minimal content. Attempting OCR via MCP...")
+
+		// Initialize MCP Client
+		// Use stored configuration
+		if mcpBin == "" {
+			fmt.Printf("MCP OCR not configured (mcpBin is empty)\n")
+			return fullText, nil
+		}
+
+		client, err := mcp.NewMCPClient(mcpBin, mcpArgs)
+		if err != nil {
+			fmt.Printf("Failed to create MCP client: %v\n", err)
+			return fullText, nil
+		}
+		defer client.Close()
+
+		ocrText, err := client.ExtractText(path)
+		if err != nil {
+			fmt.Printf("MCP OCR failed: %v\n", err)
+			return fullText, nil // Return native text as fallback
+		}
+
+		if len(ocrText) > len(fullText) {
+			return ocrText, nil
+		}
+	}
+
+	return fullText, nil
+}
+
 func parseCases(text string) []map[string]string {
 	reSplit := regexp.MustCompile(`民\s*事\s*起\s*诉\s*状`)
 	parts := reSplit.Split(text, -1)
@@ -124,14 +219,14 @@ func parseCases(text string) []map[string]string {
 		record := make(map[string]string)
 
 		// 1. Extract Defendant
-		reDefStart := regexp.MustCompile(`被告\s*[:：]`)
+		reDefStart := regexp.MustCompile(`被\s*告\s*[:：]`)
 		loc := reDefStart.FindStringIndex(part)
 
 		if loc != nil {
 			startIdx := loc[1]
 			remaining := part[startIdx:]
 
-			reKeywords := regexp.MustCompile(`[,，、\s]+(?:性别|生日|身份证|住址|联系电话)|\n|$`)
+			reKeywords := regexp.MustCompile(`[,，、\s]+(?:性\s*别|生\s*日|身\s*份\s*证|住\s*址|联\s*系\s*电\s*话)|\n|$`)
 			locEnd := reKeywords.FindStringIndex(remaining)
 
 			var name string
@@ -143,9 +238,9 @@ func parseCases(text string) []map[string]string {
 					name = lines[0]
 				}
 			}
-			record["被告"] = strings.Trim(name, " ,，、:：")
+			record["被告"] = strings.Trim(name, " ,，、:：\n\t")
 		} else {
-			reDefFallback := regexp.MustCompile(`被告\s*[:：]\s*(.*?)\n`)
+			reDefFallback := regexp.MustCompile(`被\s*告\s*[:：]\s*(.*?)\n`)
 			match := reDefFallback.FindStringSubmatch(part)
 			if len(match) > 1 {
 				record["被告"] = strings.TrimSpace(match[1])
@@ -153,21 +248,21 @@ func parseCases(text string) []map[string]string {
 		}
 
 		// 2. Extract ID
-		reID := regexp.MustCompile(`身份证号码\s*[:：]\s*([\dX]+)`)
+		reID := regexp.MustCompile(`身\s*份\s*证\s*号\s*码\s*[:：]\s*([\dX]+)`)
 		matchID := reID.FindStringSubmatch(part)
 		if len(matchID) > 1 {
 			record["身份证号码"] = strings.TrimSpace(matchID[1])
 		}
 
 		// 3. Extract Request
-		reReq := regexp.MustCompile(`(?s)诉讼请求\s*[:：]\s*(.*?)\s*事实与理由`)
+		reReq := regexp.MustCompile(`(?s)诉\s*讼\s*请\s*求\s*[:：]\s*(.*?)\s*事\s*实\s*与\s*理\s*由`)
 		matchReq := reReq.FindStringSubmatch(part)
 		if len(matchReq) > 1 {
 			record["诉讼请求"] = strings.TrimSpace(matchReq[1])
 		}
 
 		// 4. Extract Facts
-		reFact := regexp.MustCompile(`(?s)事实与理由\s*[:：]\s*(.*?)\s*此致`)
+		reFact := regexp.MustCompile(`(?s)事\s*实\s*与\s*理\s*由\s*[:：]\s*(.*?)\s*此\s*致`)
 		matchFact := reFact.FindStringSubmatch(part)
 		if len(matchFact) > 1 {
 			record["事实与理由"] = strings.TrimSpace(matchFact[1])
@@ -236,4 +331,56 @@ func ExportJSON(path string, records []Record) error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(records)
+}
+
+// ExportExcel exports records to an Excel file
+func ExportExcel(path string, records []Record) error {
+	f := excelize.NewFile()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+
+	// Create a new sheet.
+	sheetName := "Sheet1"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		return err
+	}
+
+	// Set active sheet of the workbook.
+	f.SetActiveSheet(index)
+
+	// Set headers
+	headers := []string{"被告", "身份证号码", "诉讼请求", "事实与理由"}
+	for i, header := range headers {
+		cell, err := excelize.CoordinatesToCellName(i+1, 1)
+		if err != nil {
+			return err
+		}
+		if err := f.SetCellValue(sheetName, cell, header); err != nil {
+			return err
+		}
+	}
+
+	// Set values
+	for i, r := range records {
+		row := i + 2
+		values := []string{r.Defendant, r.IDNumber, r.Request, r.FactsReason}
+		for j, v := range values {
+			cell, err := excelize.CoordinatesToCellName(j+1, row)
+			if err != nil {
+				return err
+			}
+			if err := f.SetCellValue(sheetName, cell, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := f.SaveAs(path); err != nil {
+		return err
+	}
+	return nil
 }
