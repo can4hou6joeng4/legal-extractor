@@ -1,0 +1,5 @@
+mcp:
+  bin: "npx"
+  args:
+    - "-y"
+    - "@modelcontextprotocol/server-ocr"
