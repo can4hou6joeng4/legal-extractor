@@ -1,27 +1,4 @@
-export namespace extractor {
-	
-	export class Record {
-	    defendant: string;
-	    idNumber: string;
-	    request: string;
-	    factsReason: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new Record(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.defendant = source["defendant"];
-	        this.idNumber = source["idNumber"];
-	        this.request = source["request"];
-	        this.factsReason = source["factsReason"];
-	    }
-	}
-
-}
-
-export namespace main {
+export namespace app {
 	
 	export class ExtractResult {
 	    success: boolean;
@@ -60,6 +37,29 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace extractor {
+	
+	export class Record {
+	    defendant: string;
+	    idNumber: string;
+	    request: string;
+	    factsReason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Record(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.defendant = source["defendant"];
+	        this.idNumber = source["idNumber"];
+	        this.request = source["request"];
+	        this.factsReason = source["factsReason"];
+	    }
 	}
 
 }
