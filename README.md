@@ -19,11 +19,10 @@
 
 ## ✨ 功能特性
 
-- 📄 **智能解析** - 自动识别 `.docx` 格式的法律文书结构
+- 📄 **智能解析** - 自动识别 `.docx` 和 `.pdf` 格式的法律文书结构
 - 🎯 **精准提取** - 提取被告、身份证号码、诉讼请求、事实与理由等关键字段
 - 👁️ **实时预览** - 提取前可预览数据，确保准确性
-- 💾 **一键导出** - 生成标准 CSV 文件，可直接用 Excel 打开
-- 🖥️ **跨平台** - 支持 macOS 和 Windows 系统
+- 💾 **多格式导出** - 支持 Excel (.xlsx), CSV, JSON 格式导出- 🖥️ **跨平台** - 支持 macOS 和 Windows 系统
 - 🎨 **现代界面** - 暗色主题 + 玻璃拟态设计
 
 ---
@@ -106,8 +105,8 @@ wails build -platform darwin/amd64
 
 ```yaml
 mcp:
-  bin: "npx"  # MCP 服务启动命令
-  args:       # 命令参数
+  bin: "npx" # MCP 服务启动命令
+  args: # 命令参数
     - "-y"
     - "@modelcontextprotocol/server-ocr"
 ```
@@ -116,6 +115,7 @@ mcp:
 
 - 如果未配置或配置无效，将自动回退到原生文本提取模式。
 - 确保运行环境已安装配置中指定的依赖（如 Node.js/npx）。
+- 支持通过环境变量 `LEGAL_EXTRACTOR_CONFIG` 指定配置文件路径。
 
 ---
 
@@ -124,11 +124,16 @@ mcp:
 ```
 legal-extractor/
 ├── main.go              # 应用入口
-├── app.go               # 后端 API 绑定层
 ├── wails.json           # Wails 配置
 │
-├── pkg/extractor/       # 核心业务逻辑
-│   └── extractor.go     # 文档解析 & CSV 导出
+├── internal/            # 内部包 (重构后)
+│   ├── app/             # 后端 API 绑定层
+│   ├── config/          # 配置加载
+│   ├── extractor/       # 核心业务逻辑 (提取、导出、模式)
+│   └── mcp/             # OCR 客户端
+│
+├── config/              # 配置文件
+│   └── conf.yaml
 │
 ├── frontend/            # Vue 3 前端
 │   ├── src/
