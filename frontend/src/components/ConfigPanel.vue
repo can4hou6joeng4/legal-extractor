@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { SelectOutputPath } from "../../wailsjs/go/app/App";
+import { onMounted, ref, watch } from "vue";
+import { SelectOutputPath, GetSupportedFields } from "../../wailsjs/go/app/App";
 
 const props = defineProps<{
   selectedFile: string;
@@ -7,14 +8,48 @@ const props = defineProps<{
   selectedFormat: "xlsx" | "csv" | "json";
   outputOutputPath: string;
   isLoading: boolean;
+  selectedFields: string[];
 }>();
 
 const emit = defineEmits<{
   (e: "update:selectedFormat", value: string): void;
   (e: "update:outputOutputPath", value: string): void;
+  (e: "update:selectedFields", value: string[]): void;
   (e: "preview"): void;
   (e: "extract"): void;
 }>();
+
+const availableFields = ref<any[]>([]);
+
+onMounted(async () => {
+  try {
+    const fields = await GetSupportedFields();
+    availableFields.value = fields;
+    // Default to all selected if none provided
+    if (props.selectedFields.length === 0) {
+      emit(
+        "update:selectedFields",
+        fields.map((f: any) => f.key),
+      );
+    }
+  } catch (e) {
+    console.error("Failed to fetch fields:", e);
+  }
+});
+
+function toggleField(key: string) {
+  const newFields = [...props.selectedFields];
+  const index = newFields.indexOf(key);
+  if (index > -1) {
+    if (newFields.length > 1) {
+      // Keep at least one
+      newFields.splice(index, 1);
+    }
+  } else {
+    newFields.push(key);
+  }
+  emit("update:selectedFields", newFields);
+}
 
 async function handleSelectOutput() {
   if (!props.selectedFile) return;
@@ -43,9 +78,31 @@ async function handleSelectOutput() {
 </script>
 
 <template>
-  <div v-if="selectedFile">
     <!-- Output Configuration -->
     <div class="output-config glass-panel">
+      <!-- Field Selection -->
+      <div class="config-section">
+        <span class="config-label">提取字段：</span>
+        <div class="field-list">
+          <label 
+            v-for="field in availableFields" 
+            :key="field.key" 
+            class="field-item"
+            :class="{ active: selectedFields.includes(field.key) }"
+          >
+            <input 
+              type="checkbox" 
+              :checked="selectedFields.includes(field.key)"
+              @change="toggleField(field.key)"
+            >
+            <span class="checkbox-custom"></span>
+            <span class="field-label">{{ field.label }}</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
       <div class="config-row">
         <span class="config-label">导出格式：</span>
         <select
@@ -114,47 +171,96 @@ async function handleSelectOutput() {
   border-radius: var(--radius-md);
 }
 
-.config-row {
+.config-row, .config-section {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--spacing-sm);
+}
+
+.config-section {
+  flex-direction: column;
 }
 
 .config-label {
   color: var(--text-secondary);
   font-size: 0.9rem;
   width: 80px;
+  margin-top: 4px;
 }
 
-.format-select {
-  flex: 1;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  outline: none;
+.field-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.field-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
-.path-display {
-  flex: 1;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  font-family: monospace;
+.field-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.field-item.active {
+  background: rgba(64, 158, 255, 0.15);
+  border-color: var(--accent-primary);
+}
+
+.field-item input {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.field-item.active .checkbox-custom {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.checkbox-custom::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 10px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.field-item.active .checkbox-custom::after {
+  opacity: 1;
+}
+
+.field-label {
   font-size: 0.85rem;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
 }
 
-.path-display.placeholder {
-  color: var(--text-muted);
-  direction: ltr;
+.field-item.active .field-label {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .divider {

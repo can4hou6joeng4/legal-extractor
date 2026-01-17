@@ -13,20 +13,27 @@ interface Record {
   factsReason: string;
 }
 
+interface Record extends Object {
+  [key: string]: string;
+}
+
 interface ExtractResult {
   success: boolean;
   recordCount: number;
   outputPath: string;
   errorMessage?: string;
   records?: Record[];
+  fieldLabels?: Record;
 }
 
 // State
 const selectedFile = ref<string>("");
+const selectedFields = ref<string[]>([]);
+const fieldLabels = ref<Record>({});
 const selectedFormat = ref<"xlsx" | "csv" | "json">("xlsx");
 const outputOutputPath = ref<string>("");
 const fileName = computed(() =>
-  selectedFile.value ? selectedFile.value.split("/").pop() || "" : ""
+  selectedFile.value ? selectedFile.value.split("/").pop() || "" : "",
 );
 const isLoading = ref(false);
 const result = ref<ExtractResult | null>(null);
@@ -41,7 +48,7 @@ const notification = ref<{
 // Actions
 function showNotification(
   message: string,
-  type: "success" | "error" | "info" = "info"
+  type: "success" | "error" | "info" = "info",
 ) {
   notification.value = { message, type };
   setTimeout(() => {
@@ -63,9 +70,13 @@ async function handlePreview() {
 
   isLoading.value = true;
   try {
-    const res = await PreviewData(selectedFile.value);
+    const res = await (PreviewData as any)(
+      selectedFile.value,
+      selectedFields.value,
+    );
     if (res.success && res.records) {
       previewRecords.value = res.records;
+      fieldLabels.value = res.fieldLabels || {};
       showPreview.value = true;
     }
   } catch (e) {
@@ -83,7 +94,11 @@ async function handleExtract() {
   result.value = null;
 
   try {
-    const res = await ExtractToPath(selectedFile.value, outputOutputPath.value);
+    const res = await (ExtractToPath as any)(
+      selectedFile.value,
+      outputOutputPath.value,
+      selectedFields.value,
+    );
     result.value = res;
     if (res.success) {
       showNotification("提取成功！已保存至 " + res.outputPath, "success");
@@ -116,8 +131,8 @@ async function handleExtract() {
           notification.type === "error"
             ? "⚠️"
             : notification.type === "success"
-            ? "✅"
-            : "ℹ️"
+              ? "✅"
+              : "ℹ️"
         }}</span>
         <span class="toast-message">{{ notification.message }}</span>
       </div>
@@ -171,6 +186,7 @@ async function handleExtract() {
           :fileName="fileName"
           v-model:selectedFormat="selectedFormat"
           v-model:outputOutputPath="outputOutputPath"
+          v-model:selectedFields="selectedFields"
           :isLoading="isLoading"
           @preview="handlePreview"
           @extract="handleExtract"
@@ -185,6 +201,7 @@ async function handleExtract() {
         <PreviewTable
           v-if="showPreview && previewRecords.length > 0"
           :records="previewRecords"
+          :fieldLabels="fieldLabels"
         />
       </Transition>
     </main>
@@ -293,7 +310,9 @@ async function handleExtract() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
   background: rgba(255, 255, 255, 0.05); /* Base glass effect */
 }
 

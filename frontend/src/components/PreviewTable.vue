@@ -1,58 +1,60 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 interface Record {
-  defendant: string;
-  idNumber: string;
-  request: string;
-  factsReason: string;
+  [key: string]: string;
 }
 
 const props = defineProps<{
   records: Record[];
+  fieldLabels: Record;
 }>();
+
+const columns = computed(() => {
+  if (props.records.length === 0) return [];
+  // Use the keys from the first record to determine visible columns
+  return Object.keys(props.records[0]).map((key) => ({
+    key,
+    label: props.fieldLabels[key] || key,
+    // Suggest a width based on key
+    width:
+      key === "defendant" ? "120px" : key === "idNumber" ? "180px" : "auto",
+    fixed: key === "defendant" || key === "idNumber",
+  }));
+});
 </script>
 
 <template>
   <div class="preview-section glass-panel">
     <div class="preview-header">
       <h3>数据预览</h3>
-      <span class="badge">{{ records.length }} 条记录</span>
+      <div class="header-right">
+        <span class="badge">{{ records.length }} 条记录</span>
+      </div>
     </div>
     <div class="table-wrapper">
       <table>
         <colgroup>
-          <col style="width: 100px" />
-          <col style="width: 180px" />
-          <col style="width: auto" />
-          <col style="width: auto" />
+          <col
+            v-for="col in columns"
+            :key="col.key"
+            :style="{ width: col.width }"
+          />
         </colgroup>
         <thead>
           <tr>
-            <th>被告</th>
-            <th>身份证号码</th>
-            <th>诉讼请求</th>
-            <th>事实与理由</th>
+            <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(record, index) in records.slice(0, 50)" :key="index">
-            <td>
-              <div class="cell-content fixed-text" :title="record.defendant">
-                {{ record.defendant }}
-              </div>
-            </td>
-            <td>
-              <div class="cell-content fixed-text" :title="record.idNumber">
-                {{ record.idNumber }}
-              </div>
-            </td>
-            <td>
-              <div class="cell-content truncate" :title="record.request">
-                {{ record.request }}
-              </div>
-            </td>
-            <td>
-              <div class="cell-content truncate" :title="record.factsReason">
-                {{ record.factsReason }}
+            <td v-for="col in columns" :key="col.key">
+              <div
+                class="cell-content"
+                :class="{ 'fixed-text': col.fixed, truncate: !col.fixed }"
+                :title="record[col.key]"
+              >
+                {{ record[col.key] }}
               </div>
             </td>
           </tr>
