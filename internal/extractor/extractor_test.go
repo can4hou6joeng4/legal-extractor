@@ -5,6 +5,7 @@ import (
 )
 
 func TestParseCases(t *testing.T) {
+	e := NewExtractor("", nil, nil)
 	text := `
 民 事 起 诉 状
 
@@ -20,24 +21,23 @@ func TestParseCases(t *testing.T) {
 2023年1月1日，被告向原告借款...
 此致
 `
-	expected := []map[string]string{
+	expected := []Record{
 		{
-			"被告":    "张三",
-			"身份证号码": "110101199001011234",
-			"诉讼请求":  "1. 请求判令被告偿还借款10000元。\n2. 诉讼费由被告承担。",
-			"事实与理由": "2023年1月1日，被告向原告借款...",
+			"defendant":   "张三",
+			"idNumber":    "110101199001011234",
+			"request":     "1. 请求判令被告偿还借款10000元。\n2. 诉讼费由被告承担。",
+			"factsReason": "2023年1月1日，被告向原告借款...",
 		},
 	}
 
-	result := parseCases(text)
+	result := e.parseCases(text, []string{"defendant", "idNumber", "request", "factsReason"})
 
 	if len(result) != 1 {
 		t.Fatalf("Expected 1 record, got %d", len(result))
 	}
 
 	for k, v := range expected[0] {
-		// Basic containment check as smartMerge might alter formatting slightly
-		if result[0][k] != v && k != "诉讼请求" && k != "事实与理由" {
+		if result[0][k] != v && k != "request" && k != "factsReason" {
 			t.Errorf("Field %s: expected %q, got %q", k, v, result[0][k])
 		}
 	}

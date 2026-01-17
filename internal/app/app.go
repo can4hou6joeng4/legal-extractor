@@ -54,6 +54,30 @@ type ExtractResult struct {
 	OutputPath   string             `json:"outputPath"`
 	ErrorMessage string             `json:"errorMessage,omitempty"`
 	Records      []extractor.Record `json:"records,omitempty"`
+	FieldLabels  map[string]string  `json:"fieldLabels,omitempty"` // Map of key -> Chinese label
+}
+
+// FieldOption represents a selectable extraction field
+type FieldOption struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+// GetSupportedFields returns the list of available extraction fields
+func (a *App) GetSupportedFields() []FieldOption {
+	var options []FieldOption
+	// Use PatternRegistry from extractor
+	// We want to return them in a specific order if possible
+	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
+	for _, k := range orderedKeys {
+		if p, ok := extractor.PatternRegistry[k]; ok {
+			options = append(options, FieldOption{
+				Key:   k,
+				Label: p.Label,
+			})
+		}
+	}
+	return options
 }
 
 // SelectOutputPath opens a save dialog for the user to choose destination
@@ -92,7 +116,7 @@ func (a *App) SelectOutputPath(defaultName string) (string, error) {
 }
 
 // ExtractToPath processes the input file and saves to the specific output path
-func (a *App) ExtractToPath(inputPath, outputPath string) ExtractResult {
+func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) ExtractResult {
 	if inputPath == "" || outputPath == "" {
 		return ExtractResult{
 			Success:      false,
@@ -101,7 +125,7 @@ func (a *App) ExtractToPath(inputPath, outputPath string) ExtractResult {
 	}
 
 	// 1. Extract Data
-	records, err := a.extractor.ExtractData(inputPath)
+	records, err := a.extractor.ExtractData(inputPath, fields)
 	if err != nil {
 		return ExtractResult{
 			Success:      false,
@@ -140,7 +164,7 @@ func (a *App) ExtractToPath(inputPath, outputPath string) ExtractResult {
 }
 
 // PreviewData extracts and returns records for preview (without saving)
-func (a *App) PreviewData(inputPath string) ExtractResult {
+func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
 	if inputPath == "" {
 		return ExtractResult{
 			Success:      false,
@@ -148,7 +172,7 @@ func (a *App) PreviewData(inputPath string) ExtractResult {
 		}
 	}
 
-	records, err := a.extractor.ExtractData(inputPath)
+	records, err := a.extractor.ExtractData(inputPath, fields)
 	if err != nil {
 		return ExtractResult{
 			Success:      false,
@@ -156,10 +180,17 @@ func (a *App) PreviewData(inputPath string) ExtractResult {
 		}
 	}
 
+	// Get labels for UI
+	labels := make(map[string]string)
+	for k, p := range extractor.PatternRegistry {
+		labels[k] = p.Label
+	}
+
 	return ExtractResult{
 		Success:     true,
 		RecordCount: len(records),
 		Records:     records,
+		FieldLabels: labels,
 	}
 }
 
