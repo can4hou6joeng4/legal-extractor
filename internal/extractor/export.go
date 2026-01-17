@@ -9,7 +9,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func writeCSV(path string, data []map[string]string) error {
+func writeCSV(path string, records []Record) error {
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -21,19 +21,35 @@ func writeCSV(path string, data []map[string]string) error {
 	w := csv.NewWriter(file)
 	defer w.Flush()
 
-	header := []string{"被告", "身份证号码", "诉讼请求", "事实与理由"}
-	if err := w.Write(header); err != nil {
+	if len(records) == 0 {
+		return nil
+	}
+
+	// 1. Determine Headers from the first record and PatternRegistry
+	// We want to keep a consistent order if possible
+	var keys []string
+	var headers []string
+
+	// Order based on PatternRegistry for consistency
+	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
+	for _, k := range orderedKeys {
+		if _, ok := records[0][k]; ok {
+			keys = append(keys, k)
+			headers = append(headers, PatternRegistry[k].Label)
+		}
+	}
+
+	if err := w.Write(headers); err != nil {
 		return err
 	}
 
-	for _, row := range data {
-		record := []string{
-			row["被告"],
-			row["身份证号码"],
-			row["诉讼请求"],
-			row["事实与理由"],
+	// 2. Write Data
+	for _, r := range records {
+		row := make([]string, len(keys))
+		for i, k := range keys {
+			row[i] = r[k]
 		}
-		if err := w.Write(record); err != nil {
+		if err := w.Write(row); err != nil {
 			return err
 		}
 	}
@@ -42,16 +58,7 @@ func writeCSV(path string, data []map[string]string) error {
 
 // ExportCSV exports records to a CSV file
 func ExportCSV(path string, records []Record) error {
-	data := make([]map[string]string, len(records))
-	for i, r := range records {
-		data[i] = map[string]string{
-			"被告":    r.Defendant,
-			"身份证号码": r.IDNumber,
-			"诉讼请求":  r.Request,
-			"事实与理由": r.FactsReason,
-		}
-	}
-	return writeCSV(path, data)
+	return writeCSV(path, records)
 }
 
 // ExportJSON exports records to a JSON file
@@ -86,8 +93,22 @@ func ExportExcel(path string, records []Record) error {
 	// Set active sheet of the workbook.
 	f.SetActiveSheet(index)
 
+	if len(records) == 0 {
+		return nil
+	}
+
+	// 1. Determine Headers
+	var keys []string
+	var headers []string
+	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
+	for _, k := range orderedKeys {
+		if _, ok := records[0][k]; ok {
+			keys = append(keys, k)
+			headers = append(headers, PatternRegistry[k].Label)
+		}
+	}
+
 	// Set headers
-	headers := []string{"被告", "身份证号码", "诉讼请求", "事实与理由"}
 	for i, header := range headers {
 		cell, err := excelize.CoordinatesToCellName(i+1, 1)
 		if err != nil {
@@ -98,16 +119,15 @@ func ExportExcel(path string, records []Record) error {
 		}
 	}
 
-	// Set values
+	// 2. Set values
 	for i, r := range records {
 		row := i + 2
-		values := []string{r.Defendant, r.IDNumber, r.Request, r.FactsReason}
-		for j, v := range values {
+		for j, k := range keys {
 			cell, err := excelize.CoordinatesToCellName(j+1, row)
 			if err != nil {
 				return err
 			}
-			if err := f.SetCellValue(sheetName, cell, v); err != nil {
+			if err := f.SetCellValue(sheetName, cell, r[k]); err != nil {
 				return err
 			}
 		}
