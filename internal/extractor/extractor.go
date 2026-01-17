@@ -33,33 +33,25 @@ func NewExtractor(mcpBin string, mcpArgs []string, logger *slog.Logger) *Extract
 	}
 }
 
-// Record represents a single extracted case
-type Record struct {
-	Defendant   string `json:"defendant"`
-	IDNumber    string `json:"idNumber"`
-	Request     string `json:"request"`
-	FactsReason string `json:"factsReason"`
-}
+// Record represents a single extracted case as a flexible map
+type Record map[string]string
 
-// ExtractData extracts records from a docx file and returns them
-func (e *Extractor) ExtractData(inputFile string) ([]Record, error) {
+// ExtractData extracts records from a file with specific fields requested
+func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, error) {
 	text, err := e.extractText(inputFile)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting text: %w", err)
 	}
-	rawRecords := parseCases(text)
 
-	// Convert to typed struct
-	records := make([]Record, len(rawRecords))
-	for i, r := range rawRecords {
-		records[i] = Record{
-			Defendant:   r["被告"],
-			IDNumber:    r["身份证号码"],
-			Request:     r["诉讼请求"],
-			FactsReason: r["事实与理由"],
+	// If fields is nil or empty, use all registered fields
+	if len(fields) == 0 {
+		for k := range PatternRegistry {
+			fields = append(fields, k)
 		}
 	}
-	return records, nil
+
+	rawRecords := e.parseCases(text, fields)
+	return rawRecords, nil
 }
 
 // extractText extracts text based on file extension
@@ -181,63 +173,84 @@ func (e *Extractor) extractTextFromPDF(path string) (string, error) {
 	return fullText, nil
 }
 
-func parseCases(text string) []map[string]string {
+func (e *Extractor) parseCases(text string, fields []string) []Record {
 	parts := DefaultPatterns.Split.Split(text, -1)
 
-	var data []map[string]string
+	var data []Record
 
 	for _, part := range parts {
 		if strings.TrimSpace(part) == "" {
 			continue
 		}
 
-		record := make(map[string]string)
+		record := make(Record)
 
-		// 1. Extract Defendant
-		loc := DefaultPatterns.DefStart.FindStringIndex(part)
+		// Create a quick lookup for selected fields
+		fieldSet := make(map[string]bool)
+		for _, f := range fields {
+			fieldSet[f] = true
+		}
 
-		if loc != nil {
-			startIdx := loc[1]
-			remaining := part[startIdx:]
+		// 1. Extract Defendant (Commonly used as primary identifier)
+		if fieldSet["defendant"] {
+			loc := DefaultPatterns.DefStart.FindStringIndex(part)
+			if loc != nil {
+				startIdx := loc[1]
+				remaining := part[startIdx:]
+				locEnd := DefaultPatterns.DefEnd.FindStringIndex(remaining)
 
-			locEnd := DefaultPatterns.DefEnd.FindStringIndex(remaining)
-
-			var name string
-			if locEnd != nil {
-				name = remaining[:locEnd[0]]
-			} else {
-				lines := strings.Split(remaining, "\n")
-				if len(lines) > 0 {
-					name = lines[0]
+				var name string
+				if locEnd != nil {
+					name = remaining[:locEnd[0]]
+				} else {
+					lines := strings.Split(remaining, "\n")
+					if len(lines) > 0 {
+						name = lines[0]
+					}
 				}
-			}
-			record["被告"] = strings.Trim(name, " ,，、:：\n\t")
-		} else {
-			match := DefaultPatterns.DefFallback.FindStringSubmatch(part)
-			if len(match) > 1 {
-				record["被告"] = strings.TrimSpace(match[1])
+				record["defendant"] = strings.Trim(name, " ,，、:：\n\t")
+			} else {
+				match := DefaultPatterns.DefFallback.FindStringSubmatch(part)
+				if len(match) > 1 {
+					record["defendant"] = strings.TrimSpace(match[1])
+				}
 			}
 		}
 
 		// 2. Extract ID
-		matchID := DefaultPatterns.ID.FindStringSubmatch(part)
-		if len(matchID) > 1 {
-			record["身份证号码"] = strings.TrimSpace(matchID[1])
+		if fieldSet["idNumber"] {
+			matchID := DefaultPatterns.ID.FindStringSubmatch(part)
+			if len(matchID) > 1 {
+				record["idNumber"] = strings.TrimSpace(matchID[1])
+			}
 		}
 
 		// 3. Extract Request
-		matchReq := DefaultPatterns.Request.FindStringSubmatch(part)
-		if len(matchReq) > 1 {
-			record["诉讼请求"] = smartMerge(matchReq[1])
+		if fieldSet["request"] {
+			matchReq := DefaultPatterns.Request.FindStringSubmatch(part)
+			if len(matchReq) > 1 {
+				record["request"] = smartMerge(matchReq[1])
+			}
 		}
 
 		// 4. Extract Facts
-		matchFact := DefaultPatterns.Facts.FindStringSubmatch(part)
-		if len(matchFact) > 1 {
-			record["事实与理由"] = smartMerge(matchFact[1])
+		if fieldSet["factsReason"] {
+			matchFact := DefaultPatterns.Facts.FindStringSubmatch(part)
+			if len(matchFact) > 1 {
+				record["factsReason"] = smartMerge(matchFact[1])
+			}
 		}
 
-		if record["被告"] != "" || record["身份证号码"] != "" {
+		// If at least one field is non-empty, add the record
+		hasData := false
+		for _, val := range record {
+			if val != "" {
+				hasData = true
+				break
+			}
+		}
+
+		if hasData {
 			data = append(data, record)
 		}
 	}

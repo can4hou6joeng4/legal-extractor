@@ -23,3 +23,14 @@ var DefaultPatterns = ExtractionPatterns{
 	Request:     regexp.MustCompile(`(?s)诉\s*讼\s*请\s*求\s*[:：]\s*(.*?)\s*事\s*实\s*与\s*理\s*由`),
 	Facts:       regexp.MustCompile(`(?s)事\s*实\s*与\s*理\s*由\s*[:：]\s*(.*?)\s*此\s*致`),
 }
+
+// PatternRegistry maps field names to their respective patterns
+var PatternRegistry = map[string]struct {
+	Label   string
+	Pattern *regexp.Regexp
+}{
+	"defendant":   {Label: "被告", Pattern: DefaultPatterns.DefStart},
+	"idNumber":    {Label: "身份证号码", Pattern: DefaultPatterns.ID},
+	"request":     {Label: "诉讼请求", Pattern: DefaultPatterns.Request},
+	"factsReason": {Label: "事实与理由", Pattern: DefaultPatterns.Facts},
+}
