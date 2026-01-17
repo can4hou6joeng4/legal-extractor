@@ -25,26 +25,22 @@ func main() {
 		configPath = "config/conf.yaml"
 	}
 
-	var mcpBin string
-	var mcpArgs []string
-
-	cfg, err := config.LoadConfig(configPath)
-	if err != nil {
-		slog.Warn("Could not load config", "path", configPath, "error", err)
-	} else {
-		mcpBin = cfg.MCP.Bin
-		mcpArgs = cfg.MCP.Args
+	if err := config.Init(configPath); err != nil {
+		slog.Warn("Could not initialize config", "path", configPath, "error", err)
 	}
+
+	// Get MCP configuration
+	mcpCfg := config.GetMCP()
 
 	// Initialize Extractor
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ext := extractor.NewExtractor(mcpBin, mcpArgs, logger)
+	ext := extractor.NewExtractor(mcpCfg.Bin, mcpCfg.Args, logger)
 
 	// Create an instance of the app structure
 	application := app.NewApp(ext)
 
 	// Create application with options
-	err = wails.Run(&options.App{
+	err := wails.Run(&options.App{
 		Title:  "legal-extractor",
 		Width:  1024,
 		Height: 768,
