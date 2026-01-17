@@ -2,9 +2,10 @@
   <img src="build/appicon.png" alt="Legal Extractor Logo" width="120" height="120">
 </p>
 
-<h1 align="center">Legal Document Extractor</h1>
+<h1 align="center">Legal Document Extractor / 法律文书提取器</h1>
 
 <p align="center">
+  <strong>Intelligent information extraction from legal documents with one-click structured export</strong><br>
   <strong>从法律文书中智能提取关键信息，一键导出为结构化数据</strong>
 </p>
 
@@ -17,13 +18,15 @@
 
 ---
 
-## ✨ 功能特性
+## ✨ Features / 功能特性
 
-- 📄 **智能解析** - 自动识别 `.docx` 和 `.pdf` 格式的法律文书结构
-- 🎯 **精准提取** - 提取被告、身份证号码、诉讼请求、事实与理由等关键字段
-- 👁️ **实时预览** - 提取前可预览数据，确保准确性
-- 💾 **多格式导出** - 支持 Excel (.xlsx), CSV, JSON 格式导出- 🖥️ **跨平台** - 支持 macOS 和 Windows 系统
-- 🎨 **现代界面** - 暗色主题 + 玻璃拟态设计
+- 📄 **Smart Parsing / 智能解析** - Auto-detect structure of `.docx` and `.pdf` legal documents / 自动识别 `.docx` 和 `.pdf` 格式的法律文书结构
+- 🎯 **Precise Extraction / 精准提取** - Extract key fields like defendant, ID, requests, and facts / 提取被告、身份证号码、诉讼请求、事实与理由等关键字段
+- 👁️ **Live Preview / 实时预览** - Preview data before extraction to ensure accuracy / 提取前可预览数据，确保准确性
+- 💾 **Multi-format Export / 多格式导出** - Support Excel (.xlsx), CSV, and JSON / 支持 Excel (.xlsx), CSV, JSON 格式导出
+- 🖥️ **Cross-platform / 跨平台** - Native support for macOS and Windows / 支持 macOS 和 Windows 系统
+- 🎨 **Modern UI / 现代界面** - Dark theme with Glassmorphism design / 暗色主题 + 玻璃拟态设计
+- 🔧 **OCR Support / OCR 支持** - Optional MCP OCR for scanned documents / 支持通过 MCP 集成 OCR 处理扫描件
 
 ---
 
@@ -35,44 +38,46 @@
 
 ---
 
-## 🚀 快速开始
+## 🚀 Quick Start / 快速开始
 
-### 下载运行
+### Download / 下载运行
 
-1. 从 [Releases](./build/bin) 下载对应平台的安装包
-2. **macOS**: 双击 `legal-extractor.app` 运行
-3. **Windows**: 双击 `legal-extractor.exe` 运行
+1. Download the installer for your platform from [Releases](https://github.com/can4hou6joeng4/legal-extractor/releases)
+   从 [Releases](https://github.com/can4hou6joeng4/legal-extractor/releases) 下载对应平台的安装包
+2. **macOS**: Drag `legal-extractor.app` to Applications / 将应用拖入应用程序文件夹
+3. **Windows**: Run `legal-extractor_setup.exe` / 运行安装程序程序
 
-### 使用步骤
+### Usage / 使用步骤
 
-1. 点击 **「选择 .docx 文件」** 按钮，选择法律文书
-2. 点击 **「预览数据」** 查看提取结果（可选）
-3. 点击 **「提取并保存」** 导出 CSV 文件
+1. Click **"Select Files"** to choose documents / 点击 **“选择文件”** 选择法律文书
+2. Click **"Preview"** to verify data (Optional) / 点击 **“预览”** 查看提取结果（可选）
+3. Click **"Extract & Save"** to export / 点击 **“提取并保存”** 导出文件
 
 ---
 
-## 🛠️ 开发指南
+## 🛠️ Development / 开发指南
 
-### 环境要求
+### Prerequisites / 环境要求
 
 - Go 1.21+
 - Node.js 18+
 - [Wails CLI](https://wails.io/docs/gettingstarted/installation)
 
-### 安装依赖
+### Setup / 安装依赖
 
 ```bash
 # 安装 Wails CLI
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-# 克隆项目
-cd /path/to/legal-extractor
+# Clone project / 克隆项目
+git clone https://github.com/can4hou6joeng4/legal-extractor.git
+cd legal-extractor
 
-# 安装前端依赖
+# Install dependencies / 安装前端依赖
 cd frontend && npm install && cd ..
 ```
 
-### 开发模式
+### Dev Mode / 开发模式
 
 ```bash
 wails dev
@@ -97,16 +102,17 @@ wails build -platform darwin/amd64
 
 ---
 
-## ⚙️ OCR 配置 (可选)
+## ⚙️ OCR Configuration / OCR 配置 (Optional)
 
-本项目支持通过 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 集成 OCR 能力，用于处理扫描版 PDF 或图片 PDF。
+This project supports OCR via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+本项目支持通过 MCP 集成 OCR 能力。
 
-如需启用 OCR，请在项目根目录下创建 `config/conf.yaml` 文件，配置如下：
+Create `config/conf.yaml` in the root directory / 在根目录创建 `config/conf.yaml`：
 
 ```yaml
 mcp:
-  bin: "npx" # MCP 服务启动命令
-  args: # 命令参数
+  bin: "npx"
+  args:
     - "-y"
     - "@modelcontextprotocol/server-ocr"
 ```
@@ -119,29 +125,29 @@ mcp:
 
 ---
 
-## 📁 项目结构
+## 📁 Project Structure / 项目结构
 
 ```
 legal-extractor/
 ├── main.go              # 应用入口
 ├── wails.json           # Wails 配置
 │
-├── internal/            # 内部包 (重构后)
-│   ├── app/             # 后端 API 绑定层
-│   ├── config/          # 配置加载
-│   ├── extractor/       # 核心业务逻辑 (提取、导出、模式)
-│   └── mcp/             # OCR 客户端
+├── internal/            # Core logic (重构后的核心逻辑)
+│   ├── app/             # Backend API bindings
+│   ├── config/          # Configuration management
+│   ├── extractor/       # Extraction & Export engines
+│   └── mcp/             # OCR Client
 │
 ├── config/              # 配置文件
 │   └── conf.yaml
 │
-├── frontend/            # Vue 3 前端
+├── frontend/            # Vue 3 Frontend (前端组件)
 │   ├── src/
 │   │   ├── App.vue      # 主界面组件
 │   │   └── style.css    # 全局样式
 │   └── wailsjs/         # Wails 自动生成的 TS 绑定
 │
-└── build/               # 构建资源 & 产物
+└── build/               # Build assets & installers
     ├── appicon.png      # 应用图标
     └── bin/             # 可执行文件
 ```
@@ -160,14 +166,14 @@ legal-extractor/
 
 ---
 
-## 📝 提取字段说明
+## 📝 Extraction Fields / 提取字段
 
-| 字段           | 来源                             | 匹配规则                          |
-| :------------- | :------------------------------- | :-------------------------------- |
-| **被告**       | `被告:` 后的姓名                 | 截取至 `性别`/`身份证` 等关键词前 |
-| **身份证号码** | `身份证号码:` 后的数字串         | 18 位数字+X                       |
-| **诉讼请求**   | `诉讼请求:` 至 `事实与理由` 之间 | 多行文本                          |
-| **事实与理由** | `事实与理由:` 至 `此致` 之间     | 多行文本                          |
+| Field / 字段            | Rule / 匹配规则                                            |
+| :---------------------- | :--------------------------------------------------------- |
+| **Defendant / 被告**    | Extracted from text after "被告:" / 从 "被告:" 后提取      |
+| **ID / 身份证**         | 18-digit ID number patterns / 自动识别 18 位身份证号       |
+| **Requests / 诉讼请求** | Content between "诉讼请求" and "事实与理由" / 诉讼请求段落 |
+| **Facts / 事实与理由**  | Content between "事实与理由" and "此致" / 事实与理由段落   |
 
 ---
 
