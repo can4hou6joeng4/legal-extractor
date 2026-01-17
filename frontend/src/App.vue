@@ -6,7 +6,7 @@ import {
   ExtractToPath,
   PreviewData,
   OpenFile,
-} from "../wailsjs/go/main/App";
+} from "../wailsjs/go/app/App";
 import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime";
 
 interface Record {
