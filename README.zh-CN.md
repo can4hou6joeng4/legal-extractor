@@ -121,7 +121,7 @@ legal-extractor/
 
 ## 📄 开源协议
 
-MIT License © 2026
+[MIT License](LICENSE) © 2026
 
 ---
 
