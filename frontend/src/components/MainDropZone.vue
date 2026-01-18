@@ -69,8 +69,14 @@ async function handleSelectFile() {
   >
     <div class="drop-content">
       <div class="icon-wrapper">
-        <span v-if="!selectedFile" class="icon">📂</span>
-        <span v-else class="icon">📄</span>
+        <div v-if="!selectedFile" class="icon-svg">
+            <!-- Folder Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+        </div>
+        <div v-else class="icon-svg">
+            <!-- File Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+        </div>
       </div>
       <div class="text-content">
         <h3 v-if="!selectedFile">点击或拖拽上传文件</h3>

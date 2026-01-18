@@ -7,14 +7,11 @@ import ResultCard from "./components/ResultCard.vue";
 import PreviewTable from "./components/PreviewTable.vue";
 
 interface Record {
-  defendant: string;
-  idNumber: string;
-  request: string;
-  factsReason: string;
-}
-
-interface Record extends Object {
-  [key: string]: string;
+  [key: string]: any;
+  defendant?: string;
+  idNumber?: string;
+  request?: string;
+  factsReason?: string;
 }
 
 interface ExtractResult {
@@ -127,13 +124,11 @@ async function handleExtract() {
     <!-- Notification Toast -->
     <Transition name="toast">
       <div v-if="notification" class="toast" :class="notification.type">
-        <span class="toast-icon">{{
-          notification.type === "error"
-            ? "⚠️"
-            : notification.type === "success"
-              ? "✅"
-              : "ℹ️"
-        }}</span>
+        <span class="toast-icon">
+            <svg v-if="notification.type === 'error'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            <svg v-else-if="notification.type === 'success'" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4 12 14.01l-3-3"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        </span>
         <span class="toast-message">{{ notification.message }}</span>
       </div>
     </Transition>
@@ -163,9 +158,9 @@ async function handleExtract() {
               <polyline points="10 9 9 9 8 9"></polyline>
             </svg>
           </div>
-          <span class="logo-text text-gradient-brand">LegalExtractor</span>
+          <span class="logo-text font-heading text-gradient-brand">LegalExtractor</span>
         </div>
-        <h1 class="title">
+        <h1 class="title font-heading">
           法律文书<span class="text-gradient-brand">智能提取</span>
         </h1>
         <p class="subtitle">高效、精准的 .docx / .pdf 数据提取工具</p>

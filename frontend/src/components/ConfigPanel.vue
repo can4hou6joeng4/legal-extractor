@@ -139,7 +139,10 @@ async function handleSelectOutput() {
         @click="emit('preview')"
         :disabled="isLoading"
       >
-        <span>👁️ 预览数据</span>
+        <span class="btn-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        </span>
+        <span>预览数据</span>
       </button>
 
       <button
@@ -149,10 +152,12 @@ async function handleSelectOutput() {
         :title="!outputOutputPath ? '请先选择保存位置' : ''"
       >
         <span v-if="isLoading" class="loader"></span>
-        <span v-else>🚀 开始提取</span>
+        <span v-else class="btn-content">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 16.5 4-4c2-2 2.83-2.83 4-1.17 1.17 1.66 2 1.66 4 0L21 7.5"/><path d="M21 20.66 4.5 4.16"/><path d="M16 4h5v5"/></svg>
+            <span>开始提取</span>
+        </span>
       </button>
     </div>
-  </div>
 </template>
 
 <style scoped>
@@ -281,6 +286,7 @@ async function handleSelectOutput() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px; /* Added gap */
   padding: 0.8rem 1.8rem;
   border-radius: var(--radius-md);
   font-weight: 600;
@@ -289,6 +295,12 @@ async function handleSelectOutput() {
   border: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 140px;
+}
+
+.btn-content, .btn-icon {
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .btn-sm {

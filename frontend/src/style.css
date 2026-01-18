@@ -1,45 +1,54 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600;700&family=Lato:wght@300;400;700&display=swap');
 
 :root {
     /* ============================
-     Premium Color Palette (Dark Theme Default)
+     Trust & Authority Palette (Dark Theme)
+     Target: Legal Extractor
      ============================ */
 
+    /* Fonts */
+    --font-heading: 'EB Garamond', serif;
+    --font-body: 'Lato', system-ui, sans-serif;
+
     /* Backgrounds */
-    --bg-primary: #0f172a;
-    /* Slate 900 */
-    --bg-secondary: #1e293b;
-    /* Slate 800 */
+    --bg-primary: #0F172A;
+    /* Slate 900 - Primary Background */
+    --bg-secondary: #020617;
+    /* Slate 950 - Deeper Contrast */
 
     /* Text */
-    --text-primary: #f8fafc;
+    --text-primary: #F8FAFC;
     /* Slate 50 */
-    --text-secondary: #e2e8f0;
-    /* Slate 200 */
-    --text-muted: #94a3b8;
-    /* Slate 400 */
+    --text-secondary: #CBD5E1;
+    /* Slate 300 - Higher Legibility */
+    --text-muted: #64748B;
+    /* Slate 500 */
 
-    /* Brand Accents (Gradient Bases) */
-    --accent-primary: #3b82f6;
-    /* Blue 500 */
-    --accent-secondary: #8b5cf6;
-    /* Violet 500 */
-    --accent-glow: rgba(59, 130, 246, 0.15);
-    --accent-secondary-glow: rgba(139, 92, 246, 0.15);
+    /* Branding Colors */
+    --accent-primary: #0EA5E9;
+    /* Sky 500 - Trustworthy Blue (Lighter for Dark Mode) */
+    --accent-secondary: #334155;
+    /* Slate 700 - Professional Secondary */
+
+    /* Glows - More Subtle/Matte */
+    --accent-glow: rgba(14, 165, 233, 0.08);
+    --accent-secondary-glow: rgba(51, 65, 85, 0.15);
 
     /* Functional Colors */
     --success: #10b981;
-    /* Emerald 500 */
+    /* Emerald 500 - Kept as is, works well */
     --error: #ef4444;
     /* Red 500 */
     --warning: #f59e0b;
     /* Amber 500 */
-    --info: #3b82f6;
-    /* Blue 500 */
+    --info: #0EA5E9;
+    /* Sky 500 */
 
     /* Borders & Glass */
-    --surface-border: rgba(255, 255, 255, 0.1);
-    --glass-bg: rgba(30, 41, 59, 0.7);
+    --surface-border: rgba(148, 163, 184, 0.1);
+    /* Slate border */
+    --glass-bg: rgba(15, 23, 42, 0.8);
+    /* Darker glass for readability */
 
     /* Spacing System */
     --spacing-xs: 0.5rem;
@@ -54,10 +63,11 @@
     /* 48px */
 
     /* BorderRadius */
-    --radius-sm: 0.5rem;
-    --radius-md: 0.75rem;
-    --radius-lg: 1rem;
-    --radius-xl: 1.5rem;
+    --radius-sm: 0.25rem;
+    /* Sharper corners for professional look */
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
     --radius-full: 9999px;
 
     /* Transitions */
@@ -76,7 +86,7 @@
 }
 
 body {
-    font-family: 'Inter', 'Nunito', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-body);
     background-color: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.6;
@@ -96,12 +106,17 @@ body {
    ============================ */
 
 .text-gradient-brand {
-    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    color: var(--accent-primary);
+    /* Professional solid color usually better for legal, but if gradient desired: */
+    background: linear-gradient(135deg, #38BDF8, #818CF8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    color: transparent;
-    /* Fallback */
+}
+
+.font-heading {
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
 }
 
 /* ============================
