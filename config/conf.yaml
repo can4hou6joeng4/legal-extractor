@@ -1,0 +1,7 @@
+# Legal Extractor 配置文件
+# 支持通过环境变量覆盖，前缀为 LEGAL_EXTRACTOR_
+# 例如: LEGAL_EXTRACTOR_MCP_BIN=npx
+
+mcp:
+  bin: "npx"    # MCP 服务启动命令
+  args: ["-y", "@modelcontextprotocol/server-ocr"]   # 命令参数
