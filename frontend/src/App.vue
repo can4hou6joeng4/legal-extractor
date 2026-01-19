@@ -57,6 +57,7 @@ function handleFileUpdate(file: string) {
   selectedFile.value = file;
   // Reset state when file changes
   outputOutputPath.value = "";
+  selectedFields.value = []; // Clear previous selection
   result.value = null;
   previewRecords.value = [];
   showPreview.value = false;

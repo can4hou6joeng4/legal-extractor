@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
-import { SelectOutputPath, GetSupportedFields } from "../../wailsjs/go/app/App";
+import { ref, watch } from "vue";
+import { SelectOutputPath, ScanFields } from "../../wailsjs/go/app/App";
 
 const props = defineProps<{
   selectedFile: string;
@@ -20,22 +20,44 @@ const emit = defineEmits<{
 }>();
 
 const availableFields = ref<any[]>([]);
+const isScanning = ref(false);
 
-onMounted(async () => {
-  try {
-    const fields = await GetSupportedFields();
-    availableFields.value = fields;
-    // Default to all selected if none provided
-    if (props.selectedFields.length === 0) {
-      emit(
-        "update:selectedFields",
-        fields.map((f: any) => f.key),
-      );
+// Watch for file changes to trigger scan
+watch(
+  () => props.selectedFile,
+  async (newFile) => {
+    if (!newFile) {
+      availableFields.value = [];
+      return;
     }
-  } catch (e) {
-    console.error("Failed to fetch fields:", e);
-  }
-});
+    
+    isScanning.value = true;
+    availableFields.value = []; // Clear previous
+    
+    try {
+      const fields = await ScanFields(newFile);
+      availableFields.value = fields || [];
+      
+      // Auto-select all found fields initially
+      // In a real app we might want to preserve user choice if re-scanning same file type,
+      // but for now, fresh scan = fresh selection is cleaner.
+      if (fields && fields.length > 0) {
+        emit("update:selectedFields", fields.map((f: any) => f.key));
+      } else {
+        emit("update:selectedFields", []);
+      }
+    } catch (e) {
+      console.error("Scan failed:", e);
+      // Fallback or error state could be handled here
+    } finally {
+      // Small delay for visual consistency so skeleton doesn't flash too fast
+      setTimeout(() => {
+        isScanning.value = false;
+      }, 600);
+    }
+  },
+  { immediate: true } // Trigger on mount if file already selected
+);
 
 function toggleField(key: string) {
   const newFields = [...props.selectedFields];
@@ -82,12 +104,38 @@ async function handleSelectOutput() {
     <div class="output-config glass-panel">
       <!-- Field Selection -->
       <div class="config-section">
-        <span class="config-label">提取字段：</span>
-        <div class="field-list">
+        <div class="section-header">
+           <span class="config-label">提取字段</span>
+           <span v-if="isScanning" class="status-text blink">正在分析文档结构...</span>
+           <span v-else-if="availableFields.length > 0" class="status-text">
+             已识别 {{ availableFields.length }} 个字段
+           </span>
+        </div>
+        
+        <!-- Skeleton Loader -->
+        <div v-if="isScanning" class="field-list skeleton-list">
+           <div class="skeleton-chip" style="width: 80px"></div>
+           <div class="skeleton-chip" style="width: 120px"></div>
+           <div class="skeleton-chip" style="width: 100px"></div>
+           <div class="skeleton-chip" style="width: 90px"></div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else-if="!selectedFile" class="empty-state">
+           <span class="empty-icon">📂</span>
+           <span>请先选择文件以分析可提取字段</span>
+        </div>
+        
+        <div v-else-if="availableFields.length === 0" class="empty-state warning">
+           <span>⚠️ 未检测到可提取的字段</span>
+        </div>
+
+        <!-- Field List -->
+        <div v-else class="field-list">
           <label 
             v-for="field in availableFields" 
             :key="field.key" 
-            class="field-item"
+            class="field-chip"
             :class="{ active: selectedFields.includes(field.key) }"
           >
             <input 
@@ -95,8 +143,12 @@ async function handleSelectOutput() {
               :checked="selectedFields.includes(field.key)"
               @change="toggleField(field.key)"
             >
-            <span class="checkbox-custom"></span>
-            <span class="field-label">{{ field.label }}</span>
+            <div class="chip-content">
+                <div class="check-icon-wrapper">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="check-icon"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+                <span class="field-label">{{ field.label }}</span>
+            </div>
           </label>
         </div>
       </div>
@@ -193,85 +245,144 @@ async function handleSelectOutput() {
   margin-top: 4px;
 }
 
-.field-list {
+
+/* Section Header */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.status-text {
+  font-size: 0.8rem;
+  color: var(--accent-primary);
+}
+
+.status-text.blink {
+  animation: pulse-text 1.5s infinite;
+}
+
+/* Skeleton Loader */
+.skeleton-list {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   padding: 4px 0;
 }
 
-.field-item {
+.skeleton-chip {
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+  100% { opacity: 0.3; }
+}
+
+@keyframes pulse-text {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
+}
+
+/* Empty State */
+.empty-state {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 12px;
+  background: rgba(0,0,0,0.1);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.empty-state.warning {
+  color: #ff9f43;
+  background: rgba(255, 159, 67, 0.1);
+}
+
+/* Field Chips (New Design) */
+.field-chip {
+  position: relative;
   cursor: pointer;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 20px;
-  transition: all 0.2s ease;
   user-select: none;
 }
 
-.field-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.field-item.active {
-  background: rgba(64, 158, 255, 0.15);
-  border-color: var(--accent-primary);
-}
-
-.field-item input {
+.field-chip input {
   display: none;
 }
 
-.checkbox-custom {
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  position: relative;
-  transition: all 0.2s ease;
+.chip-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.05); /* Glassmorphism base */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
-.field-item.active .checkbox-custom {
-  background: var(--accent-primary);
+.field-chip.active .chip-content {
+  background: rgba(64, 158, 255, 0.2); /* Accent color */
   border-color: var(--accent-primary);
+  box-shadow: 0 0 10px rgba(64, 158, 255, 0.15);
 }
 
-.checkbox-custom::after {
-  content: "✓";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: white;
-  font-size: 10px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+.field-chip:hover .chip-content {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.field-item.active .checkbox-custom::after {
-  opacity: 1;
+.field-chip.active:hover .chip-content {
+  background: rgba(64, 158, 255, 0.25);
+}
+
+.check-icon-wrapper {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.3s ease, margin-right 0.3s ease;
+  display: flex;
+  align-items: center;
+  margin-right: -4px; /* Offset for hidden state */
+}
+
+.field-chip.active .check-icon-wrapper {
+  width: 14px;
+  margin-right: 4px;
+}
+
+.check-icon {
+  stroke: var(--accent-primary);
+  transform: scale(0);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); 
+}
+
+.field-chip.active .check-icon {
+  transform: scale(1);
 }
 
 .field-label {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--text-secondary);
-  transition: color 0.2s ease;
+  transition: color 0.3s ease;
 }
 
-.field-item.active .field-label {
-  color: var(--text-primary);
+.field-chip.active .field-label {
+  color: white;
   font-weight: 500;
 }
 
 .divider {
   height: 1px;
   background: rgba(255, 255, 255, 0.05);
-  margin: 4px 0;
+  margin: 12px 0;
 }
 
 /* Actions */

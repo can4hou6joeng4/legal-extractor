@@ -2,10 +2,7 @@
 import { OpenFile } from "../../wailsjs/go/app/App";
 
 interface Record {
-  defendant: string;
-  idNumber: string;
-  request: string;
-  factsReason: string;
+  [key: string]: any;
 }
 
 interface ExtractResult {
