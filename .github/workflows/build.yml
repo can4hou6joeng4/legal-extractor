@@ -93,8 +93,11 @@ jobs:
             cd release-assets/build-macOS-amd64
             if [ -d "legal-extractor.app" ]; then
               tar -czf ../../final-assets/legal-extractor_${VERSION}_darwin_amd64.app.tar.gz legal-extractor.app
-              # Create dmg (simplified - just zip the app)
-              zip -r ../../final-assets/legal-extractor_${VERSION}_darwin_amd64.dmg legal-extractor.app
+              # Create real DMG disk image using hdiutil
+              hdiutil create -volname "Legal Extractor" \
+                -srcfolder legal-extractor.app \
+                -ov -format UDZO \
+                ../../final-assets/legal-extractor_${VERSION}_darwin_amd64.dmg
             fi
             cd ../..
           fi
@@ -104,8 +107,11 @@ jobs:
             cd release-assets/build-macOS-arm64
             if [ -d "legal-extractor.app" ]; then
               tar -czf ../../final-assets/legal-extractor_${VERSION}_darwin_arm64.app.tar.gz legal-extractor.app
-              # Create dmg (simplified - just zip the app)
-              zip -r ../../final-assets/legal-extractor_${VERSION}_darwin_arm64.dmg legal-extractor.app
+              # Create real DMG disk image using hdiutil
+              hdiutil create -volname "Legal Extractor" \
+                -srcfolder legal-extractor.app \
+                -ov -format UDZO \
+                ../../final-assets/legal-extractor_${VERSION}_darwin_arm64.dmg
             fi
             cd ../..
           fi
