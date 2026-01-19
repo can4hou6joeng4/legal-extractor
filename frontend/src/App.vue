@@ -217,7 +217,8 @@ async function handleExtract() {
   padding: 40px 20px;
   position: relative;
   overflow-x: hidden;
-  min-height: 100vh;
+  height: 100vh; /* Fixed height to viewport */
+  overflow-y: auto; /* Handle scrolling internally */
 }
 
 /* Background Blurs */
