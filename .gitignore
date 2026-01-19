@@ -26,3 +26,9 @@ frontend/wailsjs/
 .venv/
 __pycache__/
 *.pyc
+
+# Documentation Plans
+docs/plans/
+
+# Debug Tools
+internal/extractor/bridge_bin/debug_pdf.py

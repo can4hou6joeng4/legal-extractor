@@ -5,7 +5,7 @@ import (
 )
 
 func TestParseCases(t *testing.T) {
-	e := NewExtractor("", nil, nil)
+	e := NewExtractor(nil)
 	text := `
 民 事 起 诉 状
 

@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"legal-extractor/internal/app"
-	"legal-extractor/internal/config"
 	"legal-extractor/internal/extractor"
 
 	"github.com/wailsapp/wails/v2"
@@ -19,22 +18,10 @@ import (
 var assets embed.FS
 
 func main() {
-	// Load Configuration
-	configPath := os.Getenv("LEGAL_EXTRACTOR_CONFIG")
-	if configPath == "" {
-		configPath = "config/conf.yaml"
-	}
-
-	if err := config.Init(configPath); err != nil {
-		slog.Warn("Could not initialize config", "path", configPath, "error", err)
-	}
-
-	// Get MCP configuration
-	mcpCfg := config.GetMCP()
 
 	// Initialize Extractor
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	ext := extractor.NewExtractor(mcpCfg.Bin, mcpCfg.Args, logger)
+	ext := extractor.NewExtractor(logger)
 
 	// Create an instance of the app structure
 	application := app.NewApp(ext)

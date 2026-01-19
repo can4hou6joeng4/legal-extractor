@@ -69,22 +69,29 @@ func (a *App) ScanFields(inputFile string) ([]FieldOption, error) {
 		return nil, fmt.Errorf("no file selected")
 	}
 
-	// 1. Extract text using the now exported method
-	text, err := a.extractor.ExtractText(inputFile)
+	// 提取数据并检测字段（PDF 和 DOCX 都使用统一接口）
+	records, err := a.extractor.ExtractData(inputFile, []string{"defendant", "idNumber", "request", "factsReason"})
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract text: %v", err)
+		return nil, fmt.Errorf("failed to extract data: %v", err)
 	}
 
 	var options []FieldOption
 	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
 
-	// 2. Check each pattern against the text
+	// 检查哪些字段在提取的记录中有值
+	fieldExists := make(map[string]bool)
+	for _, record := range records {
+		for k, v := range record {
+			if v != "" {
+				fieldExists[k] = true
+			}
+		}
+	}
+
+	// 按顺序返回存在的字段
 	for _, k := range orderedKeys {
-		if p, ok := extractor.PatternRegistry[k]; ok {
-			// We use the pattern to match against the full text
-			// Note: This is a simplified check. For strict accuracy, we might want to use the full parse logic,
-			// but for a "scan" feature, checking if the regex finds a match is usually sufficient and faster.
-			if p.Pattern.MatchString(text) {
+		if fieldExists[k] {
+			if p, ok := extractor.PatternRegistry[k]; ok {
 				options = append(options, FieldOption{
 					Key:   k,
 					Label: p.Label,
