@@ -4,11 +4,11 @@ import {app} from '../models';
 
 export function ExtractToPath(arg1:string,arg2:string,arg3:Array<string>):Promise<app.ExtractResult>;
 
-export function GetSupportedFields():Promise<Array<app.FieldOption>>;
-
 export function OpenFile(arg1:string):Promise<void>;
 
 export function PreviewData(arg1:string,arg2:Array<string>):Promise<app.ExtractResult>;
+
+export function ScanFields(arg1:string):Promise<Array<app.FieldOption>>;
 
 export function SelectFile():Promise<string>;
 

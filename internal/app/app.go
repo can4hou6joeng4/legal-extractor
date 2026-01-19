@@ -63,21 +63,37 @@ type FieldOption struct {
 	Label string `json:"label"`
 }
 
-// GetSupportedFields returns the list of available extraction fields
-func (a *App) GetSupportedFields() []FieldOption {
+// ScanFields analyzes the file and returns fields that exist in the content
+func (a *App) ScanFields(inputFile string) ([]FieldOption, error) {
+	if inputFile == "" {
+		return nil, fmt.Errorf("no file selected")
+	}
+
+	// 1. Extract text using the now exported method
+	text, err := a.extractor.ExtractText(inputFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract text: %v", err)
+	}
+
 	var options []FieldOption
-	// Use PatternRegistry from extractor
-	// We want to return them in a specific order if possible
 	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
+
+	// 2. Check each pattern against the text
 	for _, k := range orderedKeys {
 		if p, ok := extractor.PatternRegistry[k]; ok {
-			options = append(options, FieldOption{
-				Key:   k,
-				Label: p.Label,
-			})
+			// We use the pattern to match against the full text
+			// Note: This is a simplified check. For strict accuracy, we might want to use the full parse logic,
+			// but for a "scan" feature, checking if the regex finds a match is usually sufficient and faster.
+			if p.Pattern.MatchString(text) {
+				options = append(options, FieldOption{
+					Key:   k,
+					Label: p.Label,
+				})
+			}
 		}
 	}
-	return options
+
+	return options, nil
 }
 
 // SelectOutputPath opens a save dialog for the user to choose destination

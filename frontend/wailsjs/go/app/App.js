@@ -6,16 +6,16 @@ export function ExtractToPath(arg1, arg2, arg3) {
   return window['go']['app']['App']['ExtractToPath'](arg1, arg2, arg3);
 }
 
-export function GetSupportedFields() {
-  return window['go']['app']['App']['GetSupportedFields']();
-}
-
 export function OpenFile(arg1) {
   return window['go']['app']['App']['OpenFile'](arg1);
 }
 
 export function PreviewData(arg1, arg2) {
   return window['go']['app']['App']['PreviewData'](arg1, arg2);
+}
+
+export function ScanFields(arg1) {
+  return window['go']['app']['App']['ScanFields'](arg1);
 }
 
 export function SelectFile() {

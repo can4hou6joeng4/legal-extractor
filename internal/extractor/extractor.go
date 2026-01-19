@@ -38,7 +38,7 @@ type Record map[string]string
 
 // ExtractData extracts records from a file with specific fields requested
 func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, error) {
-	text, err := e.extractText(inputFile)
+	text, err := e.ExtractText(inputFile)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting text: %w", err)
 	}
@@ -54,8 +54,8 @@ func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, er
 	return rawRecords, nil
 }
 
-// extractText extracts text based on file extension
-func (e *Extractor) extractText(inputFile string) (string, error) {
+// ExtractText extracts text based on file extension
+func (e *Extractor) ExtractText(inputFile string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(inputFile))
 	switch ext {
 	case ".docx":
