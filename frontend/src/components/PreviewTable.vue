@@ -12,15 +12,20 @@ const props = defineProps<{
 
 const columns = computed(() => {
   if (props.records.length === 0) return [];
-  // Use the keys from the first record to determine visible columns
-  return Object.keys(props.records[0]).map((key) => ({
-    key,
-    label: props.fieldLabels[key] || key,
-    // Suggest a width based on key
-    width:
-      key === "defendant" ? "120px" : key === "idNumber" ? "180px" : "auto",
-    fixed: key === "defendant" || key === "idNumber",
-  }));
+  
+  // 使用固定顺序，与后端导出保持一致
+  const orderedKeys = ["defendant", "idNumber", "request", "factsReason"];
+  
+  return orderedKeys
+    .filter(key => key in props.records[0]) // 只显示存在的字段
+    .map((key) => ({
+      key,
+      label: props.fieldLabels[key] || key,
+      // Suggest a width based on key
+      width:
+        key === "defendant" ? "120px" : key === "idNumber" ? "180px" : "auto",
+      fixed: key === "defendant" || key === "idNumber",
+    }));
 });
 </script>
 

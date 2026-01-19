@@ -5,69 +5,63 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"legal-extractor/internal/mcp"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"encoding/json"
 	"os/exec"
-
-	"github.com/ledongthuc/pdf"
 )
 
 // Extractor handles document extraction logic
 type Extractor struct {
-	mcpBin  string
-	mcpArgs []string
-	logger  *slog.Logger
+	logger *slog.Logger
 }
 
 // NewExtractor creates a new Extractor instance
-func NewExtractor(mcpBin string, mcpArgs []string, logger *slog.Logger) *Extractor {
+func NewExtractor(logger *slog.Logger) *Extractor {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Extractor{
-		mcpBin:  mcpBin,
-		mcpArgs: mcpArgs,
-		logger:  logger,
+		logger: logger,
 	}
 }
 
 // Record represents a single extracted case as a flexible map
 type Record map[string]string
 
-// ExtractData extracts records from a file with specific fields requested
-func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, error) {
-	text, err := e.ExtractText(inputFile)
-	if err != nil {
-		return nil, fmt.Errorf("error extracting text: %w", err)
-	}
-
-	// If fields is nil or empty, use all registered fields
-	if len(fields) == 0 {
-		for k := range PatternRegistry {
-			fields = append(fields, k)
-		}
-	}
-
-	rawRecords := e.parseCases(text, fields)
-	return rawRecords, nil
+// PythonBridgeResponse represents the JSON response from Python script
+type PythonBridgeResponse struct {
+	Path    string   `json:"path"`
+	Records []Record `json:"records"`
+	Count   int      `json:"count"`
+	Status  string   `json:"status"`
+	Error   string   `json:"error,omitempty"`
 }
 
-// ExtractText extracts text based on file extension
-func (e *Extractor) ExtractText(inputFile string) (string, error) {
+// ExtractData extracts records from a file
+func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, error) {
 	ext := strings.ToLower(filepath.Ext(inputFile))
+
 	switch ext {
-	case ".docx":
-		return extractTextFromDocx(inputFile)
 	case ".pdf":
-		return e.extractTextFromPDF(inputFile)
+		return e.extractFromPDF(inputFile)
+	case ".docx":
+		// 对于 DOCX，仍使用原有逻辑
+		text, err := extractTextFromDocx(inputFile)
+		if err != nil {
+			return nil, fmt.Errorf("error extracting text from docx: %w", err)
+		}
+		if len(fields) == 0 {
+			for k := range PatternRegistry {
+				fields = append(fields, k)
+			}
+		}
+		return e.parseCases(text, fields), nil
 	default:
-		return "", fmt.Errorf("unsupported file extension: %s", ext)
+		return nil, fmt.Errorf("unsupported file extension: %s", ext)
 	}
 }
 
@@ -120,102 +114,45 @@ func extractTextFromDocx(path string) (string, error) {
 	return sb.String(), nil
 }
 
-func (e *Extractor) extractTextFromPDF(path string) (string, error) {
-	// 1. 尝试使用 Python Bridge (支持电子章清洗)
-	bridgeText, err := e.extractviaPythonBridge(path)
-	if err == nil && len(strings.TrimSpace(bridgeText)) > 50 {
-		return bridgeText, nil
-	}
+// extractFromPDF 使用 Python Bridge 提取 PDF 字段
+func (e *Extractor) extractFromPDF(path string) ([]Record, error) {
+	// 查找 Python 脚本路径
+	scriptPath := filepath.Join("internal", "extractor", "bridge_bin", "pdf_bridge.py")
 
-	// 2. 如果 Bridge 失败或内容不足，回退到原生提取
-	f, r, err := pdf.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
+	// 优先使用虚拟环境中的 Python
+	pythonPath := filepath.Join("internal", "extractor", "bridge_bin", ".venv", "bin", "python3")
 
-	var collectedText strings.Builder
-	totalPage := r.NumPage()
+	// 如果虚拟环境不存在（比如生产环境打包后），可能需要回退逻辑，但目前开发环境强制使用 venv
+	// 或者检查文件是否存在，这里暂且直接使用，因为我们刚创建了它
 
-	for pageIndex := 1; pageIndex <= totalPage; pageIndex++ {
-		p := r.Page(pageIndex)
-		if p.V.IsNull() {
-			continue
-		}
-		text, err := p.GetPlainText(nil)
-		if err == nil {
-			collectedText.WriteString(text)
-		}
-	}
+	e.logger.Info("Extracting PDF fields using Python Bridge", "script", scriptPath, "interpreter", pythonPath)
 
-	fullText := collectedText.String()
-
-	// 3. 检查是否需要 OCR
-	if len(strings.TrimSpace(fullText)) < 50 {
-		e.logger.Info("native text extraction yielded minimal content, attempting OCR", "path", path)
-
-		if e.mcpBin == "" {
-			e.logger.Warn("MCP OCR not configured", "reason", "mcpBin is empty")
-			return fullText, nil
-		}
-
-		client, err := mcp.NewMCPClient(e.mcpBin, e.mcpArgs)
-		if err != nil {
-			e.logger.Error("Failed to create MCP client", "error", err)
-			return fullText, nil
-		}
-		defer client.Close()
-
-		ocrText, err := client.ExtractText(path)
-		if err != nil {
-			e.logger.Error("MCP OCR failed", "error", err)
-			return fullText, nil
-		}
-
-		if len(ocrText) > len(fullText) {
-			return ocrText, nil
-		}
-	}
-
-	return fullText, nil
-}
-
-// extractviaPythonBridge 调用预编译或脚本形式的 Python 桥接工具
-func (e *Extractor) extractviaPythonBridge(path string) (string, error) {
-	// 二进制文件名（根据平台动态确定）
-	binName := "pdf_extractor_core"
-	if filepath.Ext(path) == ".exe" { // 粗略判断，实际应根据编译目标
-		binName = "pdf_extractor_core.exe"
-	}
-
-	// 1. 优先尝试寻找同一目录下的编译后二进制文件
-	bridgeBinPath := filepath.Join("internal", "extractor", "bridge_bin", binName)
-
-	var cmd *exec.Cmd
-	if _, err := os.Stat(bridgeBinPath); err == nil {
-		e.logger.Info("Using compiled Python Bridge", "path", bridgeBinPath)
-		cmd = exec.Command(bridgeBinPath, path)
-	} else {
-		// 2. 开发环境下，回退到调用 python3 + 脚本
-		scriptPath := filepath.Join("internal", "extractor", "bridge_bin", "pdf_bridge.py")
-		e.logger.Info("Python Bridge binary not found, falling back to script", "path", scriptPath)
-		cmd = exec.Command("python3", scriptPath, path)
-	}
-
+	// 调用 Python 脚本
+	cmd := exec.Command(pythonPath, scriptPath, path)
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		// 尝试获取标准错误输出
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			e.logger.Error("Python script execution failed", "stderr", string(exitErr.Stderr))
+			return nil, fmt.Errorf("python script failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("failed to execute python script (check if venv exists): %w", err)
 	}
 
-	var res struct {
-		Text   string `json:"text"`
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal(output, &res); err != nil {
-		return "", err
+	// 解析 JSON 响应
+	var response PythonBridgeResponse
+	if err := json.Unmarshal(output, &response); err != nil {
+		e.logger.Error("Failed to parse Python response", "output", string(output))
+		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return res.Text, nil
+	// 检查状态
+	if response.Status != "success" {
+		return nil, fmt.Errorf("extraction failed: %s", response.Error)
+	}
+
+	e.logger.Info("Successfully extracted PDF fields", "count", response.Count)
+	return response.Records, nil
 }
 
 func (e *Extractor) parseCases(text string, fields []string) []Record {
@@ -242,18 +179,40 @@ func (e *Extractor) parseCases(text string, fields []string) []Record {
 			if loc != nil {
 				startIdx := loc[1]
 				remaining := part[startIdx:]
-				locEnd := DefaultPatterns.DefEnd.FindStringIndex(remaining)
+
+				// 先移除所有换行和多余空格，获取一个连续的文本段
+				// 这可以处理PDF中每个字符间有换行的情况
+				cleanRemaining := strings.ReplaceAll(remaining, "\n", "")
+				cleanRemaining = strings.ReplaceAll(cleanRemaining, "\r", "")
+
+				// 在清洗后的文本中查找结束位置
+				locEnd := DefaultPatterns.DefEnd.FindStringIndex(cleanRemaining)
 
 				var name string
 				if locEnd != nil {
-					name = remaining[:locEnd[0]]
+					name = cleanRemaining[:locEnd[0]]
 				} else {
-					lines := strings.Split(remaining, "\n")
-					if len(lines) > 0 {
-						name = lines[0]
+					// 如果没找到结束标记，尝试取前面一段（假设姓名不会超过50个字符）
+					if len(cleanRemaining) > 50 {
+						name = cleanRemaining[:50]
+					} else {
+						name = cleanRemaining
+					}
+					// 尝试在这段文本中找到第一个非姓名字符
+					for i, r := range name {
+						if r == '性' || r == '男' || r == '女' || r == '生' || r == '住' || r == '联' {
+							name = name[:i]
+							break
+						}
 					}
 				}
-				record["defendant"] = strings.Trim(name, " ,，、:：\n\t")
+
+				// 清洗提取的姓名
+				name = strings.Trim(name, " ,，、:：；;\t")
+				// 移除可能的干扰词（如"被告"重复）
+				name = strings.TrimPrefix(name, "被告")
+				name = strings.TrimSpace(name)
+				record["defendant"] = name
 			} else {
 				match := DefaultPatterns.DefFallback.FindStringSubmatch(part)
 				if len(match) > 1 {

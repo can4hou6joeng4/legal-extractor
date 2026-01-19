@@ -21,3 +21,8 @@ frontend/wailsjs/
 
 # System Files
 .DS_Store
+
+# Python Environment
+.venv/
+__pycache__/
+*.pyc
