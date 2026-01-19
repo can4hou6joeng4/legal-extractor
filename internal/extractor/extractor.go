@@ -11,7 +11,9 @@ import (
 	"strings"
 
 	"encoding/json"
+	"os"
 	"os/exec"
+	"runtime"
 )
 
 // Extractor handles document extraction logic
@@ -114,16 +116,62 @@ func extractTextFromDocx(path string) (string, error) {
 	return sb.String(), nil
 }
 
+// getBridgePaths returns the python executable and script paths depending on the environment
+func (e *Extractor) getBridgePaths() (string, string, error) {
+	// 1. Get current executable path
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get executable path: %w", err)
+	}
+	exeDir := filepath.Dir(exePath)
+
+	// Define possible locations for the bridge_bin directory
+	// Priority 1: macOS App Bundle Resources (Production)
+	// Structure: legal-extractor.app/Contents/MacOS/legal-extractor -> ../Resources/bridge_bin
+	prodResourcePath := filepath.Join(exeDir, "..", "Resources", "bridge_bin")
+
+	// Priority 2: Relative to CWD (Development / Source)
+	// Structure: ./internal/extractor/bridge_bin
+	cwd, _ := os.Getwd()
+	devResourcePath := filepath.Join(cwd, "internal", "extractor", "bridge_bin")
+
+	var bridgeDir string
+
+	// Check if we are running inside an App Bundle with Resources
+	if _, err := os.Stat(filepath.Join(prodResourcePath, "pdf_bridge.py")); err == nil {
+		e.logger.Info("Using Production Bridge Path", "path", prodResourcePath)
+		bridgeDir = prodResourcePath
+	} else if _, err := os.Stat(filepath.Join(devResourcePath, "pdf_bridge.py")); err == nil {
+		e.logger.Info("Using Development Bridge Path", "path", devResourcePath)
+		bridgeDir = devResourcePath
+	} else {
+		// Fallback: Check relative to executable directly (Linux/Windows flat binary)
+		flatPath := filepath.Join(exeDir, "bridge_bin")
+		if _, err := os.Stat(filepath.Join(flatPath, "pdf_bridge.py")); err == nil {
+			e.logger.Info("Using Flat Binary Bridge Path", "path", flatPath)
+			bridgeDir = flatPath
+		} else {
+			return "", "", fmt.Errorf("bridge directory not found. Checked: %s, %s, %s", prodResourcePath, devResourcePath, flatPath)
+		}
+	}
+
+	scriptPath := filepath.Join(bridgeDir, "pdf_bridge.py")
+	pythonPath := filepath.Join(bridgeDir, ".venv", "bin", "python3")
+
+	// On Windows, python executable might be in Scripts/python.exe
+	if runtime.GOOS == "windows" {
+		pythonPath = filepath.Join(bridgeDir, ".venv", "Scripts", "python.exe")
+	}
+
+	return pythonPath, scriptPath, nil
+}
+
 // extractFromPDF 使用 Python Bridge 提取 PDF 字段
 func (e *Extractor) extractFromPDF(path string) ([]Record, error) {
-	// 查找 Python 脚本路径
-	scriptPath := filepath.Join("internal", "extractor", "bridge_bin", "pdf_bridge.py")
-
-	// 优先使用虚拟环境中的 Python
-	pythonPath := filepath.Join("internal", "extractor", "bridge_bin", ".venv", "bin", "python3")
-
-	// 如果虚拟环境不存在（比如生产环境打包后），可能需要回退逻辑，但目前开发环境强制使用 venv
-	// 或者检查文件是否存在，这里暂且直接使用，因为我们刚创建了它
+	pythonPath, scriptPath, err := e.getBridgePaths()
+	if err != nil {
+		return nil, err
+	}
 
 	e.logger.Info("Extracting PDF fields using Python Bridge", "script", scriptPath, "interpreter", pythonPath)
 
