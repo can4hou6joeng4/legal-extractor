@@ -61,11 +61,24 @@ jobs:
         run: |
           wails build -platform ${{ matrix.platform }}
 
+      - name: Compress macOS App (Darwin only)
+        if: runner.os == 'macOS'
+        run: |
+          cd build/bin
+          zip -r legal-extractor-mac.zip legal-extractor.app
+
+      - name: Rename Windows Binary (Windows only)
+        if: runner.os == 'Windows'
+        run: |
+          mv build/bin/legal-extractor.exe build/bin/legal-extractor-win.exe
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build
-          path: build/bin/*
+          name: build-artifacts-${{ matrix.os }}
+          path: |
+            build/bin/*.zip
+            build/bin/*-win.exe
 
   release:
     needs: build
@@ -76,15 +89,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/**/*.exe
-            release-assets/**/*.dmg
-            release-assets/**/*.zip
-            release-assets/**/*.app
+            release-assets/*.exe
+            release-assets/*.zip
+            release-assets/*.dmg
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
