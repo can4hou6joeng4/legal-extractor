@@ -7,9 +7,13 @@ import (
 	"io"
 	"legal-extractor/internal/mcp"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"encoding/json"
+	"os/exec"
 
 	"github.com/ledongthuc/pdf"
 )
@@ -117,7 +121,13 @@ func extractTextFromDocx(path string) (string, error) {
 }
 
 func (e *Extractor) extractTextFromPDF(path string) (string, error) {
-	// 1. Try Native Text Extraction
+	// 1. 尝试使用 Python Bridge (支持电子章清洗)
+	bridgeText, err := e.extractviaPythonBridge(path)
+	if err == nil && len(strings.TrimSpace(bridgeText)) > 50 {
+		return bridgeText, nil
+	}
+
+	// 2. 如果 Bridge 失败或内容不足，回退到原生提取
 	f, r, err := pdf.Open(path)
 	if err != nil {
 		return "", err
@@ -140,13 +150,10 @@ func (e *Extractor) extractTextFromPDF(path string) (string, error) {
 
 	fullText := collectedText.String()
 
-	// 2. Check if text is sufficient. If not, try OCR via MCP.
-	// Threshold: < 50 chars suggests it might be a scanned image or empty
+	// 3. 检查是否需要 OCR
 	if len(strings.TrimSpace(fullText)) < 50 {
 		e.logger.Info("native text extraction yielded minimal content, attempting OCR", "path", path)
 
-		// Initialize MCP Client
-		// Use stored configuration
 		if e.mcpBin == "" {
 			e.logger.Warn("MCP OCR not configured", "reason", "mcpBin is empty")
 			return fullText, nil
@@ -162,7 +169,7 @@ func (e *Extractor) extractTextFromPDF(path string) (string, error) {
 		ocrText, err := client.ExtractText(path)
 		if err != nil {
 			e.logger.Error("MCP OCR failed", "error", err)
-			return fullText, nil // Return native text as fallback
+			return fullText, nil
 		}
 
 		if len(ocrText) > len(fullText) {
@@ -171,6 +178,44 @@ func (e *Extractor) extractTextFromPDF(path string) (string, error) {
 	}
 
 	return fullText, nil
+}
+
+// extractviaPythonBridge 调用预编译或脚本形式的 Python 桥接工具
+func (e *Extractor) extractviaPythonBridge(path string) (string, error) {
+	// 二进制文件名（根据平台动态确定）
+	binName := "pdf_extractor_core"
+	if filepath.Ext(path) == ".exe" { // 粗略判断，实际应根据编译目标
+		binName = "pdf_extractor_core.exe"
+	}
+
+	// 1. 优先尝试寻找同一目录下的编译后二进制文件
+	bridgeBinPath := filepath.Join("internal", "extractor", "bridge_bin", binName)
+
+	var cmd *exec.Cmd
+	if _, err := os.Stat(bridgeBinPath); err == nil {
+		e.logger.Info("Using compiled Python Bridge", "path", bridgeBinPath)
+		cmd = exec.Command(bridgeBinPath, path)
+	} else {
+		// 2. 开发环境下，回退到调用 python3 + 脚本
+		scriptPath := filepath.Join("internal", "extractor", "bridge_bin", "pdf_bridge.py")
+		e.logger.Info("Python Bridge binary not found, falling back to script", "path", scriptPath)
+		cmd = exec.Command("python3", scriptPath, path)
+	}
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	var res struct {
+		Text   string `json:"text"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(output, &res); err != nil {
+		return "", err
+	}
+
+	return res.Text, nil
 }
 
 func (e *Extractor) parseCases(text string, fields []string) []Record {
