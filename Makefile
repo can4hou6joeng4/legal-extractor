@@ -56,14 +56,13 @@ deps:
 	@echo "✅ Done."
 
 # Clean build directory
+# Clean build directory
 clean:
 	@echo "🧹 Cleaning build directory..."
 	rm -rf $(BUILD_DIR)/*
-	rm -rf build/
 	rm -rf dist/
 	rm -f *.spec
 	rm -f $(BRIDGE_DIR)/pdf_extractor_core*
-	@echo "✅ Done."
 	@echo "✅ Done."
 
 .PHONY: all mac mac-universal mac-amd64 mac-arm64 windows linux deps clean

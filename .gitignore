@@ -9,5 +9,15 @@ frontend/dist
 *.docx
 *.pdf
 *.csv
+# Python Bridge build artifacts
+internal/extractor/bridge_bin/pdf_extractor_core*
+internal/extractor/bridge_bin/build/
+internal/extractor/bridge_bin/dist/
+build/pdf_extractor_core/
+*.spec
+
+# Wails
+frontend/wailsjs/
+
 # System Files
 .DS_Store
