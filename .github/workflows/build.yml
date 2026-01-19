@@ -15,11 +15,14 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            platform: darwin/universal
-            bridge_name: pdf_extractor_core
+            platform: darwin/amd64
+            arch: amd64
+          - os: macos-latest
+            platform: darwin/arm64
+            arch: arm64
           - os: windows-latest
             platform: windows/amd64
-            bridge_name: pdf_extractor_core.exe
+            arch: amd64
 
     runs-on: ${{ matrix.os }}
 
@@ -61,43 +64,69 @@ jobs:
         run: |
           wails build -platform ${{ matrix.platform }}
 
-      - name: Compress macOS App (Darwin only)
-        if: runner.os == 'macOS'
-        run: |
-          cd build/bin
-          zip -r legal-extractor-mac.zip legal-extractor.app
-
-      - name: Rename Windows Binary (Windows only)
-        if: runner.os == 'Windows'
-        run: |
-          mv build/bin/legal-extractor.exe build/bin/legal-extractor-win.exe
-
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.os }}
-          path: |
-            build/bin/*.zip
-            build/bin/*-win.exe
+          name: build-${{ runner.os }}-${{ matrix.arch }}
+          path: build/bin/*
 
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-assets
-          merge-multiple: true
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p final-assets
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          # macOS amd64
+          if [ -d "release-assets/build-macOS-amd64" ]; then
+            cd release-assets/build-macOS-amd64
+            if [ -d "legal-extractor.app" ]; then
+              tar -czf ../../final-assets/legal-extractor_${VERSION}_darwin_amd64.app.tar.gz legal-extractor.app
+              # Create dmg (simplified - just zip the app)
+              zip -r ../../final-assets/legal-extractor_${VERSION}_darwin_amd64.dmg legal-extractor.app
+            fi
+            cd ../..
+          fi
+
+          # macOS arm64
+          if [ -d "release-assets/build-macOS-arm64" ]; then
+            cd release-assets/build-macOS-arm64
+            if [ -d "legal-extractor.app" ]; then
+              tar -czf ../../final-assets/legal-extractor_${VERSION}_darwin_arm64.app.tar.gz legal-extractor.app
+              # Create dmg (simplified - just zip the app)
+              zip -r ../../final-assets/legal-extractor_${VERSION}_darwin_arm64.dmg legal-extractor.app
+            fi
+            cd ../..
+          fi
+
+          # Windows
+          if [ -d "release-assets/build-Windows-amd64" ]; then
+            cd release-assets/build-Windows-amd64
+            if [ -f "legal-extractor.exe" ]; then
+              cp legal-extractor.exe ../../final-assets/legal-extractor_${VERSION}_windows_amd64_setup.exe
+              zip ../../final-assets/legal-extractor_${VERSION}_windows_amd64.zip legal-extractor.exe
+            fi
+            cd ../..
+          fi
+
+          ls -lah final-assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release-assets/*.exe
-            release-assets/*.zip
-            release-assets/*.dmg
-          generate_release_notes: true
+          files: final-assets/*
+          body_path: RELEASE_NOTES_v${{ github.ref_name }}.md
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
