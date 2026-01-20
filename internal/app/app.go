@@ -150,9 +150,14 @@ func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) Extra
 	// 1. Extract Data
 	records, err := a.extractor.ExtractData(inputPath, fields)
 	if err != nil {
+		// 转换特定错误码
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "PDF_ENCRYPTED_OR_LOCKED") {
+			errMsg = "PDF_ENCRYPTED_OR_LOCKED"
+		}
 		return ExtractResult{
 			Success:      false,
-			ErrorMessage: fmt.Sprintf("Extraction failed: %v", err),
+			ErrorMessage: errMsg,
 		}
 	}
 
@@ -164,9 +169,23 @@ func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) Extra
 	}
 
 	// 2. Save based on extension
-	if strings.HasSuffix(strings.ToLower(outputPath), ".json") {
+	return a.ExportData(records, outputPath)
+}
+
+// ExportData 接收用户编辑后的数据并直接保存到指定路径
+func (a *App) ExportData(records []extractor.Record, outputPath string) ExtractResult {
+	if len(records) == 0 || outputPath == "" {
+		return ExtractResult{
+			Success:      false,
+			ErrorMessage: "无有效数据或未指定输出路径",
+		}
+	}
+
+	var err error
+	lowerPath := strings.ToLower(outputPath)
+	if strings.HasSuffix(lowerPath, ".json") {
 		err = extractor.ExportJSON(outputPath, records)
-	} else if strings.HasSuffix(strings.ToLower(outputPath), ".xlsx") {
+	} else if strings.HasSuffix(lowerPath, ".xlsx") {
 		err = extractor.ExportExcel(outputPath, records)
 	} else {
 		err = extractor.ExportCSV(outputPath, records)
@@ -175,7 +194,7 @@ func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) Extra
 	if err != nil {
 		return ExtractResult{
 			Success:      false,
-			ErrorMessage: fmt.Sprintf("Save failed: %v", err),
+			ErrorMessage: fmt.Sprintf("导出失败: %v", err),
 		}
 	}
 
