@@ -36,11 +36,12 @@ type Record map[string]string
 
 // PythonBridgeResponse represents the JSON response from Python script
 type PythonBridgeResponse struct {
-	Path    string   `json:"path"`
-	Records []Record `json:"records"`
-	Count   int      `json:"count"`
-	Status  string   `json:"status"`
-	Error   string   `json:"error,omitempty"`
+	Path      string   `json:"path"`
+	Records   []Record `json:"records"`
+	Count     int      `json:"count"`
+	Status    string   `json:"status"`
+	Error     string   `json:"error,omitempty"`
+	IsOCRUsed bool     `json:"is_ocr_used"`
 }
 
 // ExtractData extracts records from a file
