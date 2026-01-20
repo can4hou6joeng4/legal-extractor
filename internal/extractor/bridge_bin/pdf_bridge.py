@@ -106,8 +106,16 @@ def clean_watermark_chars(text):
     if not text:
         return ""
 
+    # *** 特别针对：招商银行电子签章 ***
+    # 截图显示这些字常被打散插入正文，如"招证"、"银码"、"商"
+    # 我们先尝试移除完整的短语
+    text = re.sub(r'招\s*商\s*银\s*行\s*电\s*子\s*签\s*章', '', text)
+    text = re.sub(r'验\s*证\s*码\s*[:：]?\s*[A-Z0-9]{10,}', '', text)
+
     # *** 第1步：移除水印字符组合（章Z、签Y、银O等）***
+    # 扩展：C银码, Z法
     text = re.sub(r'[章签子电行银商码招证验]+\s*[OZYXCB0-9]+\s*', '', text)
+    text = re.sub(r'[OZYXCB0-9]+\s*[章签子电行银商码招证验]+', '', text) # 反向：C银码
 
     # *** 第2步：移除重复的水印字（2次或以上）***
     # 例如："银银"、"商商"、"码码"
@@ -122,19 +130,26 @@ def clean_watermark_chars(text):
     watermark_set = '章签子电行银商码招证验'
     for _ in range(5):  # 多次执行以处理连续的孤立水印字
         # 匹配非水印字 + 水印字 + 非水印字
-        text = re.sub(rf'([^{watermark_set}\s])([{watermark_set}])([^{watermark_set}\s])', r'\1\3', text)
+        # 排除掉常用的"银"行，"电"话，"证"件，"代"码等合法词组
+        # 这种基于字符的清洗非常危险，容易误删，必须非常小心
+        # 更好的策略是：如果这些字出现在非自然语言的位置（如数字中间，或者打断了词语）
+        pass
+
+    # 针对截图中的具体Bad Case进行定向清洗
+    text = re.sub(r'\(截止-9招证-5', '(截止', text) # 修复: (截止2024-9-5...
+    text = re.sub(r'请依Z法裁判', '请依法裁判', text)
+    text = re.sub(r'C银码', '', text)
+
+    # *** 暴力清洗：如果一行中包含大量水印关键字，且不是正常的句子 ***
+    # 暂时不启用，避免误伤
 
     # *** 第5步：移除行首/行尾的孤立水印字 ***
     text = re.sub(rf'^[{watermark_set}]+', '', text)
     text = re.sub(rf'[{watermark_set}]+$', '', text)
 
     # *** 第6步：移除单独的水印字母 ***
-    text = re.sub(r'\s+[OZYXCB0-9]+\s+', ' ', text)
-    text = re.sub(r'^[OZYXCB0-9]+\s+', '', text)
-    text = re.sub(r'\s+[OZYXCB0-9]+$', '', text)
-
-    # *** 第7步：移除CC ***
-    text = re.sub(r'\bCC\b', '', text)
+    # 截图中有孤立的 C, Z
+    text = re.sub(r'\s+[OZYXCB]\s+', ' ', text)
 
     # *** 第8步：清理多余空格 ***
     text = re.sub(r'\s{2,}', ' ', text)
@@ -215,10 +230,31 @@ def extract_field_by_config(text, field_key):
             return name[:20]
 
     elif field_key == "idNumber":
-        id_match = re.search(r'\b(\d{17}[\dXx])\b', text)
-        if id_match: return id_match.group(1)
-        code_match = re.search(r'([A-Z0-9]{18}|[A-Z0-9]{9}-[A-Z0-9])', text)
-        if code_match: return code_match.group(1)
+        # 优先匹配明确标识的身份证
+        # 匹配 "身份证号码：123..." 或 "身份证：123..."
+        labeled_id = re.search(r'(?:身份证(?:号码)?|公民身份号码)\s*[:：]?\s*(\d{17}[\dXx])', text)
+        if labeled_id:
+            return labeled_id.group(1)
+
+        # 如果没有明确标签，尝试查找18位号码，但必须严格排除"统一社会信用代码"
+        # 统一社会信用代码通常包含字母，而身份证通常只有最后一位可能是X
+
+        # 1. 查找所有18位数字（或末位X）
+        candidates = re.findall(r'\b(\d{17}[\dXx])\b', text)
+        for cand in candidates:
+            # 简单验证：确保不是全数字的信用代码（虽然信用代码很少全数字，但为了保险）
+            # 身份证的年份通常在 1900-202x
+            year = int(cand[6:10])
+            if 1900 <= year <= 2030:
+                # 再次检查上下文，确保它前面不是"代码"、"信用"
+                idx = text.find(cand)
+                if idx > 10:
+                    prefix = text[idx-10:idx]
+                    if "代码" in prefix or "信用" in prefix or "税" in prefix:
+                        continue
+                return cand
+
+        return ""
 
     elif "start_labels" in conf:
         starts = "|".join([re.escape(l) for l in conf['start_labels']])
