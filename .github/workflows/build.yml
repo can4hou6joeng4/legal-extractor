@@ -55,16 +55,16 @@ jobs:
         run: |
           python -m PyInstaller --onefile --clean --distpath internal/extractor/bridge_bin --name pdf_extractor_core internal/extractor/bridge_bin/pdf_bridge.py
 
-      - name: Clean Frontend
-        run: |
-          # 强制清理前端构建产物和依赖，迫使 Wails 重新构建
-          rm -rf frontend/dist
-          rm -rf frontend/node_modules
-
       - name: Build Wails App
         run: |
-          # 让 Wails 全权负责前端构建流程 (npm install && npm run build)
-          wails build -platform ${{ matrix.platform }}
+          # macOS 显式构建模式：手动安装依赖并构建，避免 Wails 内部环境路径问题
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+
+          # 跳过 Wails 内置前端构建，直接使用生成的 dist
+          wails build -platform ${{ matrix.platform }} -s
 
       - name: Inject Python Bridge (macOS)
         run: |
