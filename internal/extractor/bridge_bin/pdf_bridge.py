@@ -80,80 +80,112 @@ def check_pdf_security(pdf_path):
     return False
 
 def is_seal_like_text(text_line):
-    """检测并过滤水印/电子签章干扰文本"""
+    """检测并过滤水印/电子签章干扰文本 - 优化版：减少正则检查次数"""
     if not text_line or len(text_line.strip()) == 0: return True
 
-    # 基础关键词过滤
-    seal_keywords = ['章 Z', '签 Y', 'F F F', '印章', '子 C', '电 B', '验验验', '码码码', '电电电', '签签签', '章章章', '银银银', '商商商']
+    # 只保留最有效的关键词过滤
+    seal_keywords = ['章 Z', '签 Y', 'F F F', '印章', '验验验', '码码码']
     if any(kw in text_line for kw in seal_keywords): return True
 
-    # 检测连续重复字符（3个或以上相同字符连续出现）
-    if re.search(r'(.)\1{2,}', text_line): return True
+    # 检测连续重复字符（4个或以上才算水印，减少误判）
+    if re.search(r'(.)\1{3,}', text_line): return True
 
-    # 检测混合重复模式：如 "OOO银银银", "777RRR444ZZZ"
-    # 模式：(字母或数字重复2次以上) + (汉字重复2次以上) 或反过来
-    if re.search(r'([A-Za-z0-9])\1{1,}(.)\2{1,}', text_line): return True
-    if re.search(r'(.)\1{1,}([A-Za-z0-9])\2{1,}', text_line): return True
-
-    # 检测数字+大写字母交替重复模式：如 "777RRR444ZZZ333YYY"
-    if re.search(r'(\d{2,}[A-Z]{2,}){2,}', text_line): return True
-
-    # 检测大写字母+汉字交替重复：如 "FFF子子子CCCCCC"
-    if re.search(r'([A-Z]{2,}[\u4e00-\u9fff]{2,}){2,}', text_line): return True
-
-    # 连续大写字母常见于水印（3个或以上）
-    if re.search(r'[A-Z]{3,}', text_line) and len(text_line) < 20: return True
-
-    # 计算重复字符比例，如果过高则认为是干扰
-    if len(text_line) >= 6:
+    # 计算重复字符比例（只对较长文本检查）
+    if len(text_line) >= 8:
         char_counts = {}
         for c in text_line:
             char_counts[c] = char_counts.get(c, 0) + 1
         max_repeat = max(char_counts.values())
-        if max_repeat / len(text_line) > 0.4:  # 某字符占比超过40%
+        if max_repeat / len(text_line) > 0.5:  # 提高阈值到50%，减少误判
             return True
 
     return False
 
+def clean_watermark_chars(text):
+    """深度清理水印字符，保留实际内容"""
+    if not text:
+        return ""
+
+    # *** 第1步：移除水印字符组合（章Z、签Y、银O等）***
+    text = re.sub(r'[章签子电行银商码招证验]+\s*[OZYXCB0-9]+\s*', '', text)
+
+    # *** 第2步：移除重复的水印字（2次或以上）***
+    # 例如："银银"、"商商"、"码码"
+    text = re.sub(r'([章签子电行银商码招证验])\1+', '', text)
+
+    # *** 第3步：移除连续的不同水印字（如"银商码"）***
+    # 匹配2个或以上连续的水印字
+    text = re.sub(r'[章签子电行银商码招证验]{2,}', '', text)
+
+    # *** 第4步：移除孤立的单个水印字（关键！）***
+    # 匹配：正常汉字 + 单个水印字 + 正常汉字
+    watermark_set = '章签子电行银商码招证验'
+    for _ in range(5):  # 多次执行以处理连续的孤立水印字
+        # 匹配非水印字 + 水印字 + 非水印字
+        text = re.sub(rf'([^{watermark_set}\s])([{watermark_set}])([^{watermark_set}\s])', r'\1\3', text)
+
+    # *** 第5步：移除行首/行尾的孤立水印字 ***
+    text = re.sub(rf'^[{watermark_set}]+', '', text)
+    text = re.sub(rf'[{watermark_set}]+$', '', text)
+
+    # *** 第6步：移除单独的水印字母 ***
+    text = re.sub(r'\s+[OZYXCB0-9]+\s+', ' ', text)
+    text = re.sub(r'^[OZYXCB0-9]+\s+', '', text)
+    text = re.sub(r'\s+[OZYXCB0-9]+$', '', text)
+
+    # *** 第7步：移除CC ***
+    text = re.sub(r'\bCC\b', '', text)
+
+    # *** 第8步：清理多余空格 ***
+    text = re.sub(r'\s{2,}', ' ', text)
+
+    return text.strip()
+
 def extract_text_only(pdf_path):
-    """提取纯文本，支持简单的表格识别还原"""
+    """提取纯文本 - 优化版：使用layout模式，深度清理水印"""
     extracted_pages = []
-    total_chars = 0
+    total_chars_count = 0
+
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            chars = page.chars
-            total_chars += len(chars)
+            # 直接使用layout提取，大幅提升性能
+            page_text = page.extract_text(layout=True, x_tolerance=3, y_tolerance=3)
 
-            # 优先检查是否存在表格
+            if page_text:
+                # 智能过滤：只保留包含实际汉字内容的行（至少3个汉字）
+                lines = page_text.split('\n')
+                filtered = []
+                for line in lines:
+                    stripped = line.strip()
+                    # 跳过空行和纯空格行
+                    if not stripped or len(stripped.replace(' ', '')) == 0:
+                        continue
+
+                    # 检查是否包含至少3个汉字（避免纯水印行）
+                    chinese_chars = re.findall(r'[\u4e00-\u9fff]', stripped)
+                    if len(chinese_chars) >= 3:
+                        # 使用统一的水印清理函数
+                        cleaned = clean_watermark_chars(stripped)
+                        if cleaned:
+                            filtered.append(cleaned)
+
+                page_text = '\n'.join(filtered)
+                total_chars_count += len(page_text)
+
+            # 提取表格（如果有）
             tables = page.extract_tables()
-            table_text = ""
             if tables:
+                table_text = ""
                 for table in tables:
                     for row in table:
                         row_content = [str(cell) for cell in row if cell]
                         table_text += " ".join(row_content) + "\n"
+                page_text = (page_text or "") + "\n" + table_text
 
-            if len(chars) > 0:
-                lines = {}
-                for char in chars:
-                    y = round(char['top'], 1)
-                    if y not in lines: lines[y] = []
-                    lines[y].append(char)
-
-                sorted_lines = []
-                for y in sorted(lines.keys()):
-                    line_chars = sorted(lines[y], key=lambda c: c['x0'])
-                    line_text = ''.join(c['text'] for c in line_chars)
-                    if not is_seal_like_text(line_text):
-                        sorted_lines.append(line_text.strip())
-                page_text = '\n'.join(sorted_lines) + "\n" + table_text
-            else:
-                page_text = page.extract_text(layout=True) or ""
-
-            extracted_pages.append(page_text)
+            extracted_pages.append(page_text or "")
 
     full_text = '\n\n'.join(extracted_pages)
-    return full_text, (total_chars < 100)
+    return full_text, (total_chars_count < 50)  # 更严格的OCR触发阈值
 
 def smart_merge(text):
     """智能合并换行符，优化阅读排版"""
@@ -166,7 +198,7 @@ def smart_merge(text):
     return '\n'.join([''.join(line.split()) for line in lines])
 
 def extract_field_by_config(text, field_key):
-    """基于配置的动态提取引擎"""
+    """基于配置的动态提取引擎 - 优化版：增强内容清洗"""
     conf = FIELD_CONFIG.get(field_key)
     if not conf: return ""
 
@@ -191,9 +223,22 @@ def extract_field_by_config(text, field_key):
     elif "start_labels" in conf:
         starts = "|".join([re.escape(l) for l in conf['start_labels']])
         ends = "|".join([re.escape(l) for l in conf['end_labels']])
-        pattern = re.compile(rf'(?:{starts})\s*[:：]?\s*(.*?)(?:{ends}|$)', re.DOTALL)
+
+        # 改进的正则：要求冒号后有换行或空白，然后才是正文内容
+        pattern = re.compile(rf'(?:{starts})\s*[:：]\s*\n?\s*(.*?)(?:\n(?:{ends})|$)', re.DOTALL)
         match = pattern.search(text)
-        if match: return smart_merge(match.group(1))
+
+        if match:
+            raw_content = match.group(1)
+
+            # 后处理：清除开头可能出现的乱序片段
+            # 移除开头的"码"、"招商银行"、"电子签章"等干扰词（限制在前30个字符内）
+            cleaned = re.sub(r'^[码招商银行电子签章]{0,30}', '', raw_content)
+
+            # 再次清理：如果开头还有冒号、空格等，也去掉
+            cleaned = re.sub(r'^[:：\s]+', '', cleaned)
+
+            return smart_merge(cleaned)
 
     return ""
 
@@ -210,13 +255,20 @@ def main():
     try:
         text_content, is_scanned = extract_text_only(input_file)
         ocr_content = None
-        if (is_scanned or "被告" not in text_content) and OCR_AVAILABLE:
+        # 性能优化：只在字符数极少时才触发OCR，避免不必要的OCR处理
+        if is_scanned and OCR_AVAILABLE:
             try:
                 ocr_content = OCRExtractor().extract(input_file)
             except Exception: pass
 
         main_content = ocr_content if (not text_content or len(text_content) < 200) and ocr_content else text_content
-        cases = re.split(r'民\s*事\s*起\s*诉\s*状', main_content)
+
+        # 清理水印字符后再分割
+        # 移除常见的水印干扰字符（银O、章Z、签Y等）
+        main_content_clean = re.sub(r'[银章签子电行商码招证验]+\s*[OZYXCB]+\s*', '', main_content)
+
+        # 更宽松的分隔符匹配，允许中间有空格或干扰字符
+        cases = re.split(r'民\s*[银]?\s*事\s*[O]?\s*起\s*诉\s*状', main_content_clean)
 
         records = []
         for case_text in cases:
