@@ -125,12 +125,17 @@ async function handleSelectOutput() {
 
         <!-- Empty State -->
         <div v-else-if="!selectedFile" class="empty-state">
-           <span class="empty-icon">📂</span>
+           <span class="empty-icon">
+             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 2H4a2 2 0 0 0-2 2v13.61A2.39 2.39 0 0 0 4 20Z"/></svg>
+           </span>
            <span>请先选择文件以分析可提取字段</span>
         </div>
-        
+
         <div v-else-if="availableFields.length === 0" class="empty-state warning">
-           <span>⚠️ 未检测到可提取的字段</span>
+           <span class="warning-icon">
+             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+           </span>
+           <span>未检测到可提取的字段</span>
         </div>
 
         <!-- Field Grid -->
@@ -191,7 +196,9 @@ async function handleSelectOutput() {
            <label class="cell-label">导出位置</label>
            <div class="path-input-group">
                <div class="path-display" :class="{ placeholder: !outputOutputPath }" :title="outputOutputPath">
-                 <span class="path-icon">📂</span>
+                 <span class="path-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                 </span>
                  <span class="path-text">{{ outputOutputPath || "请选择保存位置..." }}</span>
                </div>
                <button class="btn-icon-only" @click="handleSelectOutput" title="更改位置">
@@ -296,7 +303,9 @@ async function handleSelectOutput() {
 /* Field Grid */
 .field-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* Optimized for 4 items: use larger min-width to force 2 columns layout */
+  /* 280px ensures 2 columns on typical widths (800px container), avoiding the 3+1 orphan layout */
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
   align-items: stretch; /* Ensure all items in a row have equal height */
 }
@@ -398,25 +407,30 @@ async function handleSelectOutput() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0; /* Critical: allows grid item to shrink below content size */
 }
 
 /* Custom Select */
 .select-wrapper {
   position: relative;
+  height: 44px; /* Match path input height */
 }
 
 .custom-select {
   width: 100%;
+  height: 100%;
   appearance: none;
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
-  padding: 10px 14px;
+  padding: 0 40px 0 16px; /* Adjust padding for height centering */
   border-radius: 10px;
   font-size: 0.95rem;
   outline: none;
   cursor: pointer;
   transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
 }
 
 .custom-select:hover, .custom-select:focus {
@@ -436,7 +450,8 @@ async function handleSelectOutput() {
 /* Path Input */
 .path-input-group {
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  align-items: center;
 }
 
 .path-display {
@@ -444,13 +459,20 @@ async function handleSelectOutput() {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 0 16px;
+  height: 44px; /* Fixed height */
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: 0.9rem;
   color: var(--text-primary);
   overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.path-display:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.3);
 }
 
 .path-display.placeholder .path-text {
@@ -463,15 +485,23 @@ async function handleSelectOutput() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1; /* Fix vertical alignment */
+  transform: translateY(1px); /* Optical correction for monospace font */
+  flex: 1; /* Take remaining space */
+  min-width: 0; /* Allow shrinking below content size */
 }
 
 .path-icon {
   opacity: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 .btn-icon-only {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -481,11 +511,13 @@ async function handleSelectOutput() {
   color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .btn-icon-only:hover {
   background: rgba(255, 255, 255, 0.15);
   border-color: var(--text-muted);
+  transform: translateY(-1px);
 }
 
 /* Skeleton */
@@ -521,7 +553,8 @@ async function handleSelectOutput() {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 28px;
+  padding: 0 32px; /* Horizontal padding only */
+  height: 48px; /* Fixed height for perfect centering */
   border-radius: 12px;
   font-weight: 600;
   font-size: 1rem;
@@ -529,35 +562,34 @@ async function handleSelectOutput() {
   cursor: pointer;
   border: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  min-width: 140px;
+  min-width: 160px; /* Slightly wider */
+}
+
+.btn-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
 }
 
 .btn-primary.btn-glow {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  box-shadow: 0 4px 20px rgba(64, 158, 255, 0.3);
+  background: linear-gradient(135deg, var(--color-cta), var(--color-cta-hover));
+  box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3);
   position: relative;
   overflow: hidden;
-}
-
-.btn-primary.btn-glow::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(rgba(255, 255, 255, 0.2), transparent);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.btn-primary.btn-glow:hover::after {
-  opacity: 1;
+  color: #fff;
 }
 
 .btn-primary.btn-glow:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(64, 158, 255, 0.4);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.4);
 }
 
 .btn:disabled,
