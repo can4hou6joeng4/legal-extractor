@@ -53,7 +53,14 @@ jobs:
 
       - name: Build Python Bridge
         run: |
-          python -m PyInstaller --onefile --clean --distpath internal/extractor/bridge_bin --name pdf_extractor_core internal/extractor/bridge_bin/pdf_bridge.py
+          # 使用 --collect-all 强制收集 OCR 库的所有隐式依赖(模型、动态库等)
+          python -m PyInstaller --onefile --clean \
+            --distpath internal/extractor/bridge_bin \
+            --name pdf_extractor_core \
+            --collect-all rapidocr_onnxruntime \
+            --collect-all onnxruntime \
+            --collect-all pyclipper \
+            internal/extractor/bridge_bin/pdf_bridge.py
 
       - name: Build Wails App
         run: |
@@ -194,7 +201,14 @@ jobs:
 
       - name: Build Python Bridge
         run: |
-          python -m PyInstaller --onefile --clean --distpath internal/extractor/bridge_bin --name pdf_extractor_core internal/extractor/bridge_bin/pdf_bridge.py
+          # 使用 --collect-all 强制收集 OCR 库的所有隐式依赖(模型、动态库等)
+          python -m PyInstaller --onefile --clean \
+            --distpath internal/extractor/bridge_bin \
+            --name pdf_extractor_core \
+            --collect-all rapidocr_onnxruntime \
+            --collect-all onnxruntime \
+            --collect-all pyclipper \
+            internal/extractor/bridge_bin/pdf_bridge.py
 
       - name: Build Wails App
         shell: powershell

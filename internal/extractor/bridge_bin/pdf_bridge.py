@@ -26,18 +26,26 @@ FIELD_CONFIG = {
     }
 }
 
+OCR_ERROR_MSG = ""
 try:
     from rapidocr_onnxruntime import RapidOCR
     import fitz  # PyMuPDF
     OCR_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     OCR_AVAILABLE = False
+    OCR_ERROR_MSG = str(e)
+except Exception as e:
+    OCR_AVAILABLE = False
+    OCR_ERROR_MSG = f"OCR Init Failed: {str(e)}"
 
 class OCRExtractor:
     def __init__(self):
         if not OCR_AVAILABLE:
-            raise ImportError("OCR libraries not installed")
-        self.ocr = RapidOCR()
+            raise ImportError(f"OCR libraries not installed or failed to load: {OCR_ERROR_MSG}")
+        try:
+            self.ocr = RapidOCR()
+        except Exception as e:
+            raise RuntimeError(f"RapidOCR initialization failed: {str(e)}")
 
     def extract(self, pdf_path):
         doc = fitz.open(pdf_path)
