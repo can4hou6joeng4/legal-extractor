@@ -32,7 +32,21 @@ const outputOutputPath = ref<string>("");
 const fileName = computed(() =>
   selectedFile.value ? selectedFile.value.split("/").pop() || "" : "",
 );
-const isLoading = ref(false);
+
+// Loading State Management
+type LoadingState = 'idle' | 'previewing' | 'extracting' | 'analyzing';
+const loadingState = ref<LoadingState>('idle');
+const isLoading = computed(() => loadingState.value !== 'idle');
+
+const loadingText = computed(() => {
+  switch (loadingState.value) {
+    case 'previewing': return { title: '正在生成预览...', desc: '正在解析文档关键信息' };
+    case 'extracting': return { title: '正在提取数据...', desc: '正在导出至指定格式' };
+    case 'analyzing': return { title: '正在分析文档...', desc: '正在识别可提取字段' };
+    default: return { title: '正在处理中...', desc: '请稍候' };
+  }
+});
+
 const result = ref<ExtractResult | null>(null);
 const previewRecords = ref<Record[]>([]);
 const showPreview = ref(false);
@@ -61,12 +75,13 @@ function handleFileUpdate(file: string) {
   result.value = null;
   previewRecords.value = [];
   showPreview.value = false;
+  // Trigger analysis state visually if needed, though ScanFields is fast
 }
 
 async function handlePreview() {
   if (!selectedFile.value) return;
 
-  isLoading.value = true;
+  loadingState.value = 'previewing';
   try {
     const res = await (PreviewData as any)(
       selectedFile.value,
@@ -81,14 +96,14 @@ async function handlePreview() {
     console.error("Preview failed:", e);
     showNotification("预览失败", "error");
   } finally {
-    isLoading.value = false;
+    loadingState.value = 'idle';
   }
 }
 
 async function handleExtract() {
   if (!selectedFile.value) return;
 
-  isLoading.value = true;
+  loadingState.value = 'extracting';
   result.value = null;
 
   try {
@@ -104,7 +119,7 @@ async function handleExtract() {
     }
 
     if (!finalOutputPath) {
-      isLoading.value = false;
+      loadingState.value = 'idle';
       return;
     }
 
@@ -142,7 +157,7 @@ async function handleExtract() {
       errorMessage: e.message || "Unknown error",
     };
   } finally {
-    isLoading.value = false;
+    loadingState.value = 'idle';
   }
 }
 </script>
@@ -168,15 +183,16 @@ async function handleExtract() {
     <!-- Loading Overlay -->
     <Transition name="fade">
       <div v-if="isLoading" class="loading-overlay">
-        <div class="loading-spinner">
-          <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-          </svg>
-        </div>
-        <div class="loading-content">
-          <h3 class="loading-title">正在处理中...</h3>
-          <p class="loading-desc" v-if="selectedFile.toLowerCase().endsWith('.pdf')">正在进行智能 OCR 识别，请耐心等待</p>
-          <p class="loading-desc" v-else>正在解析文档结构</p>
+        <div class="loading-card glass-panel">
+          <div class="loading-spinner">
+            <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+            </svg>
+          </div>
+          <div class="loading-content">
+            <h3 class="loading-title">{{ loadingText.title }}</h3>
+            <p class="loading-desc">{{ loadingText.desc }}</p>
+          </div>
         </div>
       </div>
     </Transition>
@@ -434,5 +450,70 @@ async function handleExtract() {
 .toast-message {
   font-size: 0.95rem;
   color: var(--text-primary);
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.loading-card {
+  padding: 40px 60px;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.loading-spinner {
+  color: var(--accent-primary);
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
+}
+
+.animate-spin {
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-title {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.loading-desc {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  opacity: 0.8;
 }
 </style>
