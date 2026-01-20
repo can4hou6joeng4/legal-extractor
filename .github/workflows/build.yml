@@ -99,25 +99,51 @@ jobs:
           echo "✅ Cleanup complete. Available space:"
           df -h
 
-      - name: Create DMG
+      - name: Create DMG (Manual Method)
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
             VERSION="dev"
           fi
 
-          APP_PATH="build/bin/legal-extractor.app"
+          APP_NAME="legal-extractor.app"
+          APP_PATH="build/bin/$APP_NAME"
+          DMG_NAME="legal-extractor_${VERSION}_darwin_${{ matrix.arch }}.dmg"
+
           if [ -d "$APP_PATH" ]; then
-            # 创建 tar.gz 压缩包
+            echo "📦 Packaging $APP_PATH into $DMG_NAME..."
+
+            # 1. 创建一个足够大(2GB)的临时稀疏镜像，避免自动估算空间不足
+            # 使用 sparseimage 不会立即占用2GB物理空间
+            hdiutil create -size 2g -volname "Legal Extractor" -type SPARSE -fs HFS+ -fsargs "-c c=64,a=16,e=16" tmp_image
+
+            # 2. 挂载镜像
+            # -nobrowse: 不在 Finder 显示
+            # -noverify: 不验证
+            # -noautoopen: 不自动打开
+            MOUNT_POINT=$(hdiutil attach -nobrowse -noverify -noautoopen tmp_image.sparseimage | grep "Apple_HFS" | awk '{print $3}')
+            echo "💿 Mounted at: $MOUNT_POINT"
+
+            # 3. 复制 App 到镜像中
+            cp -R "$APP_PATH" "$MOUNT_POINT/"
+
+            # 4. 创建 /Applications 软链接 (可选，方便用户拖拽安装)
+            ln -s /Applications "$MOUNT_POINT/Applications"
+
+            # 5. 卸载镜像
+            hdiutil detach "$MOUNT_POINT"
+
+            # 6. 转换为最终的压缩 DMG (UDZO)
+            hdiutil convert tmp_image.sparseimage -format UDZO -o "build/bin/$DMG_NAME"
+
+            # 清理临时文件
+            rm tmp_image.sparseimage
+
+            # 同时保留 tar.gz 作为备选
             cd build/bin
             tar -czf legal-extractor_${VERSION}_darwin_${{ matrix.arch }}.app.tar.gz legal-extractor.app
-            
-            # 使用 hdiutil 创建真正的 DMG 文件（在 macOS runner 上执行）
-            hdiutil create -volname "Legal Extractor" \
-              -srcfolder legal-extractor.app \
-              -ov -format UDZO \
-              legal-extractor_${VERSION}_darwin_${{ matrix.arch }}.dmg
-            
+
+            echo "✅ Packaging complete:"
             ls -lah *.dmg *.tar.gz
           else
             echo "❌ App bundle not found at $APP_PATH"
