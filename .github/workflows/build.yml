@@ -28,8 +28,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
-          cache: true
+          go-version: "1.24"
+          cache: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -118,8 +118,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
-          cache: true
+          go-version: "1.24"
+          cache: false
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -146,9 +146,16 @@ jobs:
           python -m PyInstaller --onefile --clean --distpath internal/extractor/bridge_bin --name pdf_extractor_core internal/extractor/bridge_bin/pdf_bridge.py
 
       - name: Build Wails App
+        shell: powershell
         run: |
-          # 让 Wails 全权负责前端构建流程 (npm install && npm run build)
-          wails build -platform windows/amd64
+          # Windows 显式构建模式：手动安装依赖并构建
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+
+          # 跳过 Wails 内置前端构建
+          wails build -platform windows/amd64 -s
 
       - name: Inject Python Bridge (Windows)
         shell: powershell
