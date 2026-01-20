@@ -16,8 +16,7 @@ internal/extractor/bridge_bin/dist/
 build/pdf_extractor_core/
 *.spec
 
-# Wails
-frontend/wailsjs/
+# Wails (keep wailsjs/ tracked for CI builds)
 
 # System Files
 .DS_Store
