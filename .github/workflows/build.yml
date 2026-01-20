@@ -134,22 +134,21 @@ jobs:
           wails build -platform windows/amd64
 
       - name: Package Windows
-        shell: bash
+        shell: powershell
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
-            VERSION="dev"
-          fi
+          $VERSION = "${{ github.ref_name }}" -replace "v",""
+          if ([string]::IsNullOrEmpty($VERSION)) { $VERSION = "dev" }
 
           cd build/bin
-          if [ -f "legal-extractor.exe" ]; then
-            cp legal-extractor.exe legal-extractor_${VERSION}_windows_amd64.exe
-            zip legal-extractor_${VERSION}_windows_amd64.zip legal-extractor.exe
-            ls -lah *.exe *.zip
-          else
-            echo "❌ Windows executable not found"
+          if (Test-Path "legal-extractor.exe") {
+            $TargetName = "legal-extractor_${VERSION}_windows_amd64.exe"
+            Copy-Item "legal-extractor.exe" -Destination $TargetName
+            Compress-Archive -Path "legal-extractor.exe" -DestinationPath "legal-extractor_${VERSION}_windows_amd64.zip"
+            Get-ChildItem *.exe, *.zip
+          } else {
+            Write-Error "❌ Windows executable not found"
             exit 1
-          fi
+          }
 
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
