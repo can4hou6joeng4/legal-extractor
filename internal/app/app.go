@@ -69,28 +69,26 @@ func (a *App) ScanFields(inputFile string) ([]FieldOption, error) {
 		return nil, fmt.Errorf("no file selected")
 	}
 
-	// 提取数据并检测字段（PDF 和 DOCX 都使用统一接口）
-	records, err := a.extractor.ExtractData(inputFile, []string{"defendant", "idNumber", "request", "factsReason"})
+	// 使用轻量级扫描模式，不再进行全量提取
+	availableKeys, err := a.extractor.ScanFields(inputFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract data: %v", err)
+		// 降级策略：如果扫描失败，返回所有字段供用户手动选择
+		// return nil, fmt.Errorf("failed to scan fields: %v", err)
+		availableKeys = []string{"defendant", "idNumber", "request", "factsReason"}
 	}
 
 	var options []FieldOption
 	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
 
-	// 检查哪些字段在提取的记录中有值
-	fieldExists := make(map[string]bool)
-	for _, record := range records {
-		for k, v := range record {
-			if v != "" {
-				fieldExists[k] = true
-			}
-		}
+	// Create lookup set
+	keyMap := make(map[string]bool)
+	for _, k := range availableKeys {
+		keyMap[k] = true
 	}
 
 	// 按顺序返回存在的字段
 	for _, k := range orderedKeys {
-		if fieldExists[k] {
+		if keyMap[k] {
 			if p, ok := extractor.PatternRegistry[k]; ok {
 				options = append(options, FieldOption{
 					Key:   k,

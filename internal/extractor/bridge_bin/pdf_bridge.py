@@ -224,8 +224,11 @@ def extract_field_by_config(text, field_key):
         starts = "|".join([re.escape(l) for l in conf['start_labels']])
         ends = "|".join([re.escape(l) for l in conf['end_labels']])
 
-        # 改进的正则：要求冒号后有换行或空白，然后才是正文内容
-        pattern = re.compile(rf'(?:{starts})\s*[:：]\s*\n?\s*(.*?)(?:\n(?:{ends})|$)', re.DOTALL)
+        # 改进的正则：冒号可选，允许更宽松的空白字符和换行作为边界
+        # (?:{starts})\s*[:：]?\s* : 匹配开始标签，后面可能有冒号，也可能没有
+        # (.*?) : 非贪婪匹配正文内容
+        # (?:\s+(?:{ends})|$) : 匹配结束标签（前面允许有空格/换行）或字符串结尾
+        pattern = re.compile(rf'(?:{starts})\s*[:：]?\s*\n?\s*(.*?)(?:\s+(?:{ends})|$)', re.DOTALL)
         match = pattern.search(text)
 
         if match:
@@ -242,10 +245,53 @@ def extract_field_by_config(text, field_key):
 
     return ""
 
+def quick_scan(pdf_path):
+    """快速扫描模式：只读取第一页文本，检查字段是否存在，绝不进行OCR"""
+    found_keys = []
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            if len(pdf.pages) > 0:
+                # 只读第一页，且只取前1000字符，足够判断案由和基本信息
+                first_page_text = pdf.pages[0].extract_text() or ""
+
+                # 简单关键词匹配
+                if "被告" in first_page_text or "被申请人" in first_page_text:
+                    found_keys.append("defendant")
+
+                # 身份证通常也在前面
+                if re.search(r'\d{18}|\d{17}[Xx]', first_page_text) or "身份证" in first_page_text:
+                    found_keys.append("idNumber")
+
+                # 诉讼请求通常在前两页
+                if "诉讼请求" in first_page_text or "请求事项" in first_page_text:
+                    found_keys.append("request")
+
+                # 事实与理由
+                if "事实与理由" in first_page_text or "事实和理由" in first_page_text:
+                    found_keys.append("factsReason")
+
+    except Exception:
+        pass
+
+    # 如果没扫到，为了用户体验，默认返回所有常用字段
+    # 因为扫描失败不代表提取失败（提取时有OCR兜底）
+    if not found_keys:
+        found_keys = ["defendant", "idNumber", "request", "factsReason"]
+
+    print(json.dumps({
+        "status": "success",
+        "keys": found_keys
+    }, ensure_ascii=False))
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No input file", "status": "failed"}))
         sys.exit(1)
+
+    # 检查是否是快速扫描模式
+    if len(sys.argv) > 2 and sys.argv[1] == "--scan":
+        quick_scan(sys.argv[2])
+        sys.exit(0)
 
     input_file = sys.argv[1]
     if check_pdf_security(input_file):

@@ -251,6 +251,71 @@ func (e *Extractor) extractFromPDF(path string) ([]Record, error) {
 	return response.Records, nil
 }
 
+// ScanResult represents the response from quick scan
+type ScanResult struct {
+	Status string   `json:"status"`
+	Keys   []string `json:"keys"`
+	Error  string   `json:"error,omitempty"`
+}
+
+// ScanFields performs a lightweight scan of the file to determine available fields
+// It avoids full extraction and OCR
+func (e *Extractor) ScanFields(inputFile string) ([]string, error) {
+	ext := strings.ToLower(filepath.Ext(inputFile))
+
+	// For DOCX, scanning is fast enough with regular extraction (xml parsing is cheap)
+	if ext == ".docx" {
+		text, err := extractTextFromDocx(inputFile)
+		if err != nil {
+			return nil, err
+		}
+		var keys []string
+		// Check for presence of keywords
+		if strings.Contains(text, "被告") { keys = append(keys, "defendant") }
+		if strings.Contains(text, "身份证") || regexp.MustCompile(`\d{18}`).MatchString(text) { keys = append(keys, "idNumber") }
+		if strings.Contains(text, "诉讼请求") { keys = append(keys, "request") }
+		if strings.Contains(text, "事实与理由") { keys = append(keys, "factsReason") }
+
+		// If nothing found, default to all
+		if len(keys) == 0 {
+			return []string{"defendant", "idNumber", "request", "factsReason"}, nil
+		}
+		return keys, nil
+	}
+
+	// For PDF, use the new python quick scan mode
+	if ext == ".pdf" {
+		var cmd *exec.Cmd
+		binaryPath := e.getBinaryPath()
+
+		if binaryPath != "" {
+			cmd = exec.Command(binaryPath, "--scan", inputFile)
+		} else {
+			pythonPath, scriptPath, err := e.getBridgePaths()
+			if err != nil {
+				return nil, err
+			}
+			cmd = exec.Command(pythonPath, scriptPath, "--scan", inputFile)
+		}
+
+		output, err := cmd.Output()
+		if err != nil {
+			e.logger.Error("Scan failed", "error", err)
+			// Fallback to all fields on error
+			return []string{"defendant", "idNumber", "request", "factsReason"}, nil
+		}
+
+		var res ScanResult
+		if err := json.Unmarshal(output, &res); err != nil {
+			return nil, fmt.Errorf("failed to parse scan result: %w", err)
+		}
+
+		return res.Keys, nil
+	}
+
+	return nil, fmt.Errorf("unsupported file type")
+}
+
 func (e *Extractor) parseCases(text string, fields []string) []Record {
 	parts := DefaultPatterns.Split.Split(text, -1)
 
