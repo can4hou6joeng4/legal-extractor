@@ -22,7 +22,7 @@ FIELD_CONFIG = {
     },
     "factsReason": {
         "start_labels": ["事实与理由", "事实和理由", "事实及理由"],
-        "end_labels": ["此致", "综上所述", "具状人", "申请人"]
+        "end_labels": ["此致", "综上所述", "具状人", "申请人", "附：", "附:"]
     }
 }
 
@@ -263,8 +263,8 @@ def extract_field_by_config(text, field_key):
         # 改进的正则：冒号可选，允许更宽松的空白字符和换行作为边界
         # (?:{starts})\s*[:：]?\s* : 匹配开始标签，后面可能有冒号，也可能没有
         # (.*?) : 非贪婪匹配正文内容
-        # (?:\s+(?:{ends})|$) : 匹配结束标签（前面允许有空格/换行）或字符串结尾
-        pattern = re.compile(rf'(?:{starts})\s*[:：]?\s*\n?\s*(.*?)(?:\s+(?:{ends})|$)', re.DOTALL)
+        # (?:\s*(?:{ends})|$) : 匹配结束标签（前面允许任意空白，甚至没有空白）或字符串结尾
+        pattern = re.compile(rf'(?:{starts})\s*[:：]?\s*\n?\s*(.*?)(?:\s*(?:{ends})|$)', re.DOTALL)
         match = pattern.search(text)
 
         if match:
@@ -276,6 +276,26 @@ def extract_field_by_config(text, field_key):
 
             # 再次清理：如果开头还有冒号、空格等，也去掉
             cleaned = re.sub(r'^[:：\s]+', '', cleaned)
+
+            # *** 强力兜底截断 ***
+            # 防止正则因为 OCR 字符粘连而失效（例如 "请依法判决此致" 中间没空格）
+            # 我们遍历所有结束标签，如果在提取的内容中发现了它们，强制截断
+            for end_label in conf.get('end_labels', []):
+                # 查找结束标签的位置
+                idx = cleaned.find(end_label)
+                if idx != -1:
+                    cleaned = cleaned[:idx]
+
+            # 额外针对落款的清理
+            if field_key == "factsReason":
+               # 如果出现 "附：" 或 "附:"，截断
+               cleaned = re.split(r'附[:：]', cleaned)[0]
+               # 如果出现 "此致"，截断
+               cleaned = cleaned.split("此致")[0]
+               # 如果出现 "具状人"，截断
+               cleaned = cleaned.split("具状人")[0]
+               # 如果出现 "申请人"，截断
+               cleaned = cleaned.split("申请人")[0]
 
             return smart_merge(cleaned)
 
