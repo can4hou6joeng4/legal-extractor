@@ -79,22 +79,22 @@ jobs:
         run: |
           echo "🧹 Performing aggressive cleanup to free space..."
 
-          # 1. 清理缓存 (macOS 路径修正)
-          rm -rf ~/Library/Caches/pip
-          rm -rf ~/.cache
-          rm -rf ~/.npm
-          rm -rf ~/go/pkg/mod
-          rm -rf ~/Library/Caches/go-build
+          # 1. 清理缓存 (使用 sudo 强制删除只读文件，如 Go mod cache)
+          sudo rm -rf ~/Library/Caches/pip
+          sudo rm -rf ~/.cache
+          sudo rm -rf ~/.npm
+          sudo rm -rf ~/go/pkg/mod
+          sudo rm -rf ~/Library/Caches/go-build
 
           # 2. 删除已编译完的源码目录 (只保留 build/bin)
           # 注意：不要删除 build/bin，那是产物目录
-          rm -rf frontend
-          rm -rf internal
-          rm -rf .git
-          rm -rf .github
+          sudo rm -rf frontend
+          sudo rm -rf internal
+          sudo rm -rf .git
+          # 保留 .github 以防 runner 需要读取元数据
 
           # 3. 删除 PyInstaller 临时目录
-          rm -rf build/pdf_extractor_core
+          sudo rm -rf build/pdf_extractor_core
 
           echo "✅ Cleanup complete. Available space:"
           df -h
