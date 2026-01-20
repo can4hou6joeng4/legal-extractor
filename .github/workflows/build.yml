@@ -57,9 +57,14 @@ jobs:
 
       - name: Build Wails App
         run: |
-          # 强制清理并重构前端，确保资源是最新的
-          cd frontend && npm run build && cd ..
-          wails build -platform ${{ matrix.platform }}
+          # 显式构建前端
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+
+          # 跳过 Wails 内置前端构建
+          wails build -platform ${{ matrix.platform }} -s
 
       - name: Inject Python Bridge (macOS)
         run: |
