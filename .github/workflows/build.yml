@@ -115,7 +115,8 @@ jobs:
 
             # 1. 创建一个足够大(2GB)的临时稀疏镜像，避免自动估算空间不足
             # 使用 sparseimage 不会立即占用2GB物理空间
-            hdiutil create -size 2g -volname "Legal Extractor" -type SPARSE -fs HFS+ -fsargs "-c c=64,a=16,e=16" tmp_image
+            # 注意：卷名不能包含空格，否则后续 awk 解析挂载点会出错
+            hdiutil create -size 2g -volname "LegalExtractor" -type SPARSE -fs HFS+ -fsargs "-c c=64,a=16,e=16" tmp_image
 
             # 2. 挂载镜像
             # -nobrowse: 不在 Finder 显示
