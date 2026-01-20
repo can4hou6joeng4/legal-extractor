@@ -75,16 +75,28 @@ jobs:
           echo "✅ Python bridge injected into $APP_RESOURCES/bridge_bin/"
           ls -R "$APP_RESOURCES/bridge_bin/"
 
-      - name: Cleanup Before Packaging
+      - name: Aggressive Cleanup for Space
         run: |
-          # 清理构建依赖以释放磁盘空间 (GitHub macOS runner 空间有限)
-          echo "🧹 Cleaning up to free space..."
-          rm -rf frontend/node_modules
+          echo "🧹 Performing aggressive cleanup to free space..."
+
+          # 1. 清理缓存 (macOS 路径修正)
+          rm -rf ~/Library/Caches/pip
+          rm -rf ~/.cache
           rm -rf ~/.npm
-          rm -rf ~/.cache/pip
-          go clean -modcache
-          # 删除 PyInstaller 的临时构建文件
-          rm -rf internal/extractor/bridge_bin/build
+          rm -rf ~/go/pkg/mod
+          rm -rf ~/Library/Caches/go-build
+
+          # 2. 删除已编译完的源码目录 (只保留 build/bin)
+          # 注意：不要删除 build/bin，那是产物目录
+          rm -rf frontend
+          rm -rf internal
+          rm -rf .git
+          rm -rf .github
+
+          # 3. 删除 PyInstaller 临时目录
+          rm -rf build/pdf_extractor_core
+
+          echo "✅ Cleanup complete. Available space:"
           df -h
 
       - name: Create DMG
