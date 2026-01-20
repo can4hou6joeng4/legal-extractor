@@ -116,7 +116,44 @@ func extractTextFromDocx(path string) (string, error) {
 	return sb.String(), nil
 }
 
+// getBinaryPath 查找编译好的 pdf_extractor_core 二进制
+// 返回二进制路径，如果找不到则返回空字符串
+func (e *Extractor) getBinaryPath() string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	exeDir := filepath.Dir(exePath)
+	cwd, _ := os.Getwd()
+
+	// 根据操作系统确定二进制文件名
+	binaryName := "pdf_extractor_core"
+	if runtime.GOOS == "windows" {
+		binaryName = "pdf_extractor_core.exe"
+	}
+
+	// 检查的路径列表（按优先级排序）
+	searchPaths := []string{
+		// macOS App Bundle: Contents/Resources/bridge_bin/
+		filepath.Join(exeDir, "..", "Resources", "bridge_bin", binaryName),
+		// Windows/Linux 扁平结构: bridge_bin/
+		filepath.Join(exeDir, "bridge_bin", binaryName),
+		// 开发模式: internal/extractor/bridge_bin/
+		filepath.Join(cwd, "internal", "extractor", "bridge_bin", binaryName),
+	}
+
+	for _, p := range searchPaths {
+		if _, err := os.Stat(p); err == nil {
+			e.logger.Info("Found compiled binary", "path", p)
+			return p
+		}
+	}
+
+	return ""
+}
+
 // getBridgePaths returns the python executable and script paths depending on the environment
+// This is used as a fallback when the compiled binary is not available (development mode)
 func (e *Extractor) getBridgePaths() (string, string, error) {
 	// 1. Get current executable path
 	exePath, err := os.Executable()
@@ -167,30 +204,40 @@ func (e *Extractor) getBridgePaths() (string, string, error) {
 }
 
 // extractFromPDF 使用 Python Bridge 提取 PDF 字段
+// 优先使用编译好的 pdf_extractor_core 二进制，如果不存在则 fallback 到 Python 脚本
 func (e *Extractor) extractFromPDF(path string) ([]Record, error) {
-	pythonPath, scriptPath, err := e.getBridgePaths()
-	if err != nil {
-		return nil, err
+	var cmd *exec.Cmd
+
+	// 优先尝试使用编译好的二进制
+	binaryPath := e.getBinaryPath()
+	if binaryPath != "" {
+		e.logger.Info("Extracting PDF using compiled binary", "binary", binaryPath)
+		cmd = exec.Command(binaryPath, path)
+	} else {
+		// Fallback: 使用 Python 脚本（开发模式或二进制缺失）
+		e.logger.Info("Compiled binary not found, falling back to Python script")
+		pythonPath, scriptPath, err := e.getBridgePaths()
+		if err != nil {
+			return nil, fmt.Errorf("no extraction method available: %w", err)
+		}
+		e.logger.Info("Extracting PDF using Python Bridge", "script", scriptPath, "interpreter", pythonPath)
+		cmd = exec.Command(pythonPath, scriptPath, path)
 	}
 
-	e.logger.Info("Extracting PDF fields using Python Bridge", "script", scriptPath, "interpreter", pythonPath)
-
-	// 调用 Python 脚本
-	cmd := exec.Command(pythonPath, scriptPath, path)
 	output, err := cmd.Output()
 	if err != nil {
 		// 尝试获取标准错误输出
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			e.logger.Error("Python script execution failed", "stderr", string(exitErr.Stderr))
-			return nil, fmt.Errorf("python script failed: %s", string(exitErr.Stderr))
+			e.logger.Error("Extraction execution failed", "stderr", string(exitErr.Stderr))
+			return nil, fmt.Errorf("extraction failed: %s", string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("failed to execute python script (check if venv exists): %w", err)
+		return nil, fmt.Errorf("failed to execute extraction: %w", err)
 	}
 
 	// 解析 JSON 响应
 	var response PythonBridgeResponse
 	if err := json.Unmarshal(output, &response); err != nil {
-		e.logger.Error("Failed to parse Python response", "output", string(output))
+		e.logger.Error("Failed to parse response", "output", string(output))
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 

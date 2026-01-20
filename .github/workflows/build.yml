@@ -1,64 +1,213 @@
-name: Wails Build
+name: Build and Release
 
 on:
   push:
-    branches: [ "main" ]
+    tags:
+      - "v*"
   workflow_dispatch:
 
-jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
+permissions:
+  contents: write
 
-    runs-on: ${{ matrix.os }}
+jobs:
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - platform: darwin/amd64
+            arch: amd64
+          - platform: darwin/arm64
+            arch: arm64
+
+    runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.21'
-        check-latest: true
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
 
-    - name: Setup Node
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10' 
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-    - name: Install Wails
-      shell: bash
-      run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
 
-    - name: Build macOS
-      if: matrix.os == 'macos-latest'
-      run: |
-        chmod +x build_mac.sh
-        ./build_mac.sh
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pdfplumber
 
-    - name: Build Windows
-      if: matrix.os == 'windows-latest'
-      shell: powershell
-      run: |
-        .\build_windows.ps1
+      - name: Build Python Bridge
+        run: |
+          python -m PyInstaller --onefile --clean --distpath internal/extractor/bridge_bin --name pdf_extractor_core internal/extractor/bridge_bin/pdf_bridge.py
 
-    - name: Upload Artifacts (macOS)
-      if: matrix.os == 'macos-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: legal-extractor-mac
-        path: build/bin/legal-extractor.app
+      - name: Build Wails App
+        run: |
+          wails build -platform ${{ matrix.platform }}
 
-    - name: Upload Artifacts (Windows)
-      if: matrix.os == 'windows-latest'
-      uses: actions/upload-artifact@v4
-      with:
-        name: legal-extractor-windows
-        path: build/bin/
+      - name: Create DMG
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
+            VERSION="dev"
+          fi
+
+          APP_PATH="build/bin/legal-extractor.app"
+          if [ -d "$APP_PATH" ]; then
+            # 创建 tar.gz 压缩包
+            cd build/bin
+            tar -czf legal-extractor_${VERSION}_darwin_${{ matrix.arch }}.app.tar.gz legal-extractor.app
+            
+            # 使用 hdiutil 创建真正的 DMG 文件（在 macOS runner 上执行）
+            hdiutil create -volname "Legal Extractor" \
+              -srcfolder legal-extractor.app \
+              -ov -format UDZO \
+              legal-extractor_${VERSION}_darwin_${{ matrix.arch }}.dmg
+            
+            ls -lah *.dmg *.tar.gz
+          else
+            echo "❌ App bundle not found at $APP_PATH"
+            exit 1
+          fi
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            build/bin/*.dmg
+            build/bin/*.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pdfplumber
+
+      - name: Build Python Bridge
+        run: |
+          python -m PyInstaller --onefile --clean --distpath internal/extractor/bridge_bin --name pdf_extractor_core internal/extractor/bridge_bin/pdf_bridge.py
+
+      - name: Build Wails App
+        run: |
+          wails build -platform windows/amd64
+
+      - name: Package Windows
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$GITHUB_REF" ]; then
+            VERSION="dev"
+          fi
+
+          cd build/bin
+          if [ -f "legal-extractor.exe" ]; then
+            cp legal-extractor.exe legal-extractor_${VERSION}_windows_amd64.exe
+            zip legal-extractor_${VERSION}_windows_amd64.zip legal-extractor.exe
+            ls -lah *.exe *.zip
+          else
+            echo "❌ Windows executable not found"
+            exit 1
+          fi
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: |
+            build/bin/*.exe
+            build/bin/*.zip
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p final-assets
+          VERSION=${GITHUB_REF#refs/tags/v}
+
+          echo "📦 Collecting release assets..."
+
+          # macOS amd64
+          if [ -d "release-assets/macos-amd64" ]; then
+            cp release-assets/macos-amd64/*.dmg final-assets/ 2>/dev/null || true
+            cp release-assets/macos-amd64/*.tar.gz final-assets/ 2>/dev/null || true
+          fi
+
+          # macOS arm64
+          if [ -d "release-assets/macos-arm64" ]; then
+            cp release-assets/macos-arm64/*.dmg final-assets/ 2>/dev/null || true
+            cp release-assets/macos-arm64/*.tar.gz final-assets/ 2>/dev/null || true
+          fi
+
+          # Windows
+          if [ -d "release-assets/windows-amd64" ]; then
+            # 只复制带版本号的文件，避免重复
+            cp release-assets/windows-amd64/*_windows_amd64.exe final-assets/legal-extractor_${VERSION}_windows_amd64_setup.exe 2>/dev/null || true
+            cp release-assets/windows-amd64/*.zip final-assets/ 2>/dev/null || true
+          fi
+
+          echo "📋 Final assets:"
+          ls -lah final-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: final-assets/*
+          body_path: RELEASE_NOTES_${{ github.ref_name }}.md
+          generate_release_notes: false
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
