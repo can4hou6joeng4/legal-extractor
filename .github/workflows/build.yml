@@ -57,7 +57,18 @@ jobs:
 
       - name: Build Wails App
         run: |
+          # 强制清理并重构前端，确保资源是最新的
+          cd frontend && npm run build && cd ..
           wails build -platform ${{ matrix.platform }}
+
+      - name: Inject Python Bridge (macOS)
+        run: |
+          # 手动将编译好的 Python 二进制注入到 App Bundle 的资源目录
+          APP_RESOURCES="build/bin/legal-extractor.app/Contents/Resources"
+          mkdir -p "$APP_RESOURCES/bridge_bin"
+          cp internal/extractor/bridge_bin/pdf_extractor_core "$APP_RESOURCES/bridge_bin/"
+          echo "✅ Python bridge injected into $APP_RESOURCES/bridge_bin/"
+          ls -R "$APP_RESOURCES/bridge_bin/"
 
       - name: Create DMG
         run: |
@@ -131,7 +142,19 @@ jobs:
 
       - name: Build Wails App
         run: |
+          # 强制清理并重构前端，确保资源是最新的
+          cd frontend && npm run build && cd ..
           wails build -platform windows/amd64
+
+      - name: Inject Python Bridge (Windows)
+        shell: powershell
+        run: |
+          # 手动将编译好的 Python 二进制注入到发布目录
+          $BridgeDir = "build/bin/bridge_bin"
+          New-Item -ItemType Directory -Force -Path $BridgeDir
+          Copy-Item "internal/extractor/bridge_bin/pdf_extractor_core.exe" -Destination "$BridgeDir/"
+          Write-Host "✅ Python bridge injected into $BridgeDir/"
+          Get-ChildItem -Recurse $BridgeDir
 
       - name: Package Windows
         shell: powershell
