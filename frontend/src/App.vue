@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { ExtractToPath, PreviewData } from "../wailsjs/go/app/App";
+import { ExtractToPath, PreviewData, ExportData, SelectOutputPath } from "../wailsjs/go/app/App";
 import MainDropZone from "./components/MainDropZone.vue";
 import ConfigPanel from "./components/ConfigPanel.vue";
 import ResultCard from "./components/ResultCard.vue";
@@ -86,22 +86,47 @@ async function handlePreview() {
 }
 
 async function handleExtract() {
-  if (!selectedFile.value || !outputOutputPath.value) return;
+  if (!selectedFile.value) return;
 
   isLoading.value = true;
   result.value = null;
 
   try {
-    const res = await (ExtractToPath as any)(
-      selectedFile.value,
-      outputOutputPath.value,
-      selectedFields.value,
-    );
+    // 弹出保存对话框
+    const defaultExt = selectedFormat.value;
+    const defaultName = `提取结果_${fileName.value.split('.')[0]}.${defaultExt}`;
+    const outputPath = await (SelectOutputPath as any)(defaultName);
+
+    if (!outputPath) {
+      isLoading.value = false;
+      return;
+    }
+
+    let res;
+    // 如果用户已经在预览区编辑了数据，直接使用导出口
+    if (previewRecords.value.length > 0) {
+      res = await (ExportData as any)(
+        previewRecords.value,
+        outputPath
+      );
+    } else {
+      // 否则运行完整提取流程
+      res = await (ExtractToPath as any)(
+        selectedFile.value,
+        outputPath,
+        selectedFields.value,
+      );
+    }
+
     result.value = res;
     if (res.success) {
       showNotification("提取成功！已保存至 " + res.outputPath, "success");
     } else {
-      showNotification(res.errorMessage || "提取失败", "error");
+      if (res.errorMessage === "PDF_ENCRYPTED_OR_LOCKED") {
+        showNotification("该 PDF 已加密或受限，无法解析", "error");
+      } else {
+        showNotification(res.errorMessage || "提取失败", "error");
+      }
     }
   } catch (e: any) {
     result.value = {

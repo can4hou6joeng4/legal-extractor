@@ -12,19 +12,23 @@ const props = defineProps<{
 
 const columns = computed(() => {
   if (props.records.length === 0) return [];
-  
+
   // 使用固定顺序，与后端导出保持一致
   const orderedKeys = ["defendant", "idNumber", "request", "factsReason"];
-  
+
+  // 找出所有在记录中出现的键
+  const allKeys = new Set<string>();
+  props.records.forEach(rec => {
+    Object.keys(rec).forEach(k => allKeys.add(k));
+  });
+
   return orderedKeys
-    .filter(key => key in props.records[0]) // 只显示存在的字段
+    .filter(key => allKeys.has(key))
     .map((key) => ({
       key,
       label: props.fieldLabels[key] || key,
-      // Suggest a width based on key
-      width:
-        key === "defendant" ? "120px" : key === "idNumber" ? "180px" : "auto",
-      fixed: key === "defendant" || key === "idNumber",
+      isLongText: key === "request" || key === "factsReason",
+      width: key === "defendant" ? "120px" : key === "idNumber" ? "200px" : "auto",
     }));
 });
 </script>
@@ -32,34 +36,42 @@ const columns = computed(() => {
 <template>
   <div class="preview-section glass-panel">
     <div class="preview-header">
-      <h3>数据预览</h3>
+      <div class="header-left">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="header-icon"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        <h3>数据预览与编辑</h3>
+      </div>
       <div class="header-right">
+        <span class="hint">💡 提取结果支持直接编辑修正</span>
         <span class="badge">{{ records.length }} 条记录</span>
       </div>
     </div>
     <div class="table-wrapper">
       <table>
-        <colgroup>
-          <col
-            v-for="col in columns"
-            :key="col.key"
-            :style="{ width: col.width }"
-          />
-        </colgroup>
         <thead>
           <tr>
-            <th v-for="col in columns" :key="col.key">{{ col.label }}</th>
+            <th v-for="col in columns" :key="col.key" :style="{ width: col.width }">
+              {{ col.label }}
+            </th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(record, index) in records.slice(0, 50)" :key="index">
+          <tr v-for="(record, index) in records" :key="index">
             <td v-for="col in columns" :key="col.key">
-              <div
-                class="cell-content"
-                :class="{ 'fixed-text': col.fixed, truncate: !col.fixed }"
-                :title="record[col.key]"
-              >
-                {{ record[col.key] }}
+              <div class="edit-cell">
+                <textarea
+                  v-if="col.isLongText"
+                  v-model="records[index][col.key]"
+                  rows="3"
+                  class="edit-input scroll-mini"
+                  spellcheck="false"
+                ></textarea>
+                <input
+                  v-else
+                  v-model="records[index][col.key]"
+                  type="text"
+                  class="edit-input"
+                  spellcheck="false"
+                />
               </div>
             </td>
           </tr>
@@ -77,30 +89,53 @@ const columns = computed(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Preview Section */
 .preview-section {
   border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 500px;
+  max-height: 600px;
+  margin-top: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 
 .preview-header {
-  padding: var(--spacing-md);
+  padding: 12px 16px;
   border-bottom: 1px solid var(--surface-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-icon {
+  color: var(--accent-primary);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .badge {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 10px;
+  background: var(--accent-primary);
+  color: white;
+  padding: 2px 8px;
   border-radius: var(--radius-full);
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .table-wrapper {
@@ -111,68 +146,76 @@ const columns = computed(() => {
 table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* Enforce fixed column widths */
 }
 
 th {
-  background: rgba(255, 255, 255, 0.02);
-  padding: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
   text-align: left;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
   position: sticky;
   top: 0;
-  backdrop-filter: blur(10px);
   z-index: 10;
-  white-space: nowrap;
+  border-bottom: 1px solid var(--surface-border);
 }
 
 td {
-  padding: var(--spacing-sm);
+  padding: 8px;
   border-bottom: 1px solid var(--surface-border);
-  font-size: 0.9rem;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
-/* Scrollbar Styles */
-.table-wrapper::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.edit-cell {
+  width: 100%;
 }
 
-.table-wrapper::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.table-wrapper::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+.edit-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  padding: 6px 8px;
+  transition: all 0.2s ease;
+  outline: none;
+  font-family: inherit;
 }
 
-.table-wrapper::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.edit-input:focus {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.2);
 }
 
-/* Truncation Utilities */
-.cell-content {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-height: 3em; /* Approximate for 2 lines */
+.edit-input:hover:not(:focus) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+textarea.edit-input {
+  resize: vertical;
   line-height: 1.5;
 }
 
-.cell-content.fixed-text {
-  -webkit-line-clamp: 1;
-  max-height: 1.5em;
-  white-space: nowrap;
-  display: block;
+/* Mini scrollbar for textareas */
+.scroll-mini::-webkit-scrollbar {
+  width: 4px;
+}
+.scroll-mini::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
 }
 
-.cell-content.truncate {
-  /* Inherits default multi-line truncation */
+.table-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+.table-wrapper::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+.table-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
 }
 </style>
