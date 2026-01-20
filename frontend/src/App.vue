@@ -92,12 +92,18 @@ async function handleExtract() {
   result.value = null;
 
   try {
-    // 弹出保存对话框
     const defaultExt = selectedFormat.value;
     const defaultName = `提取结果_${fileName.value.split('.')[0]}.${defaultExt}`;
-    const outputPath = await (SelectOutputPath as any)(defaultName);
 
-    if (!outputPath) {
+    // 逻辑优化：优先使用用户在界面上选择的路径
+    // 只有当 outputOutputPath 为空时，才弹出选择框
+    let finalOutputPath = outputOutputPath.value;
+
+    if (!finalOutputPath) {
+       finalOutputPath = await (SelectOutputPath as any)(defaultName);
+    }
+
+    if (!finalOutputPath) {
       isLoading.value = false;
       return;
     }
@@ -107,13 +113,13 @@ async function handleExtract() {
     if (previewRecords.value.length > 0) {
       res = await (ExportData as any)(
         previewRecords.value,
-        outputPath
+        finalOutputPath
       );
     } else {
       // 否则运行完整提取流程
       res = await (ExtractToPath as any)(
         selectedFile.value,
-        outputPath,
+        finalOutputPath,
         selectedFields.value,
       );
     }
@@ -156,6 +162,22 @@ async function handleExtract() {
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
         </span>
         <span class="toast-message">{{ notification.message }}</span>
+      </div>
+    </Transition>
+
+    <!-- Loading Overlay -->
+    <Transition name="fade">
+      <div v-if="isLoading" class="loading-overlay">
+        <div class="loading-spinner">
+          <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+          </svg>
+        </div>
+        <div class="loading-content">
+          <h3 class="loading-title">正在处理中...</h3>
+          <p class="loading-desc" v-if="selectedFile.toLowerCase().endsWith('.pdf')">正在进行智能 OCR 识别，请耐心等待</p>
+          <p class="loading-desc" v-else>正在解析文档结构</p>
+        </div>
       </div>
     </Transition>
 
