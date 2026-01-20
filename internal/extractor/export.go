@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -97,6 +98,17 @@ func ExportExcel(path string, records []Record) error {
 		return nil
 	}
 
+	// Create a style with text wrap enabled for cells with newlines
+	wrapStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			WrapText: true,
+			Vertical: "top",
+		},
+	})
+	if err != nil {
+		return err
+	}
+
 	// 1. Determine Headers
 	var keys []string
 	var headers []string
@@ -127,8 +139,15 @@ func ExportExcel(path string, records []Record) error {
 			if err != nil {
 				return err
 			}
-			if err := f.SetCellValue(sheetName, cell, r[k]); err != nil {
+			value := r[k]
+			if err := f.SetCellValue(sheetName, cell, value); err != nil {
 				return err
+			}
+			// Apply wrap text style if the cell contains newlines
+			if strings.Contains(value, "\n") {
+				if err := f.SetCellStyle(sheetName, cell, cell, wrapStyle); err != nil {
+					return err
+				}
 			}
 		}
 	}

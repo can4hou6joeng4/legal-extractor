@@ -82,10 +82,37 @@ def check_pdf_security(pdf_path):
 def is_seal_like_text(text_line):
     """检测并过滤水印/电子签章干扰文本"""
     if not text_line or len(text_line.strip()) == 0: return True
-    seal_keywords = ['章 Z', '签 Y', 'F F F', '印章', '子 C', '电 B', '验验验', '码码码']
+
+    # 基础关键词过滤
+    seal_keywords = ['章 Z', '签 Y', 'F F F', '印章', '子 C', '电 B', '验验验', '码码码', '电电电', '签签签', '章章章', '银银银', '商商商']
     if any(kw in text_line for kw in seal_keywords): return True
-    if re.search(r'(.)\1{3,}', text_line): return True # 重复字符
-    if re.search(r'[A-Z]{4,}', text_line) and len(text_line) < 15: return True # 连续大写字母常见于水印
+
+    # 检测连续重复字符（3个或以上相同字符连续出现）
+    if re.search(r'(.)\1{2,}', text_line): return True
+
+    # 检测混合重复模式：如 "OOO银银银", "777RRR444ZZZ"
+    # 模式：(字母或数字重复2次以上) + (汉字重复2次以上) 或反过来
+    if re.search(r'([A-Za-z0-9])\1{1,}(.)\2{1,}', text_line): return True
+    if re.search(r'(.)\1{1,}([A-Za-z0-9])\2{1,}', text_line): return True
+
+    # 检测数字+大写字母交替重复模式：如 "777RRR444ZZZ333YYY"
+    if re.search(r'(\d{2,}[A-Z]{2,}){2,}', text_line): return True
+
+    # 检测大写字母+汉字交替重复：如 "FFF子子子CCCCCC"
+    if re.search(r'([A-Z]{2,}[\u4e00-\u9fff]{2,}){2,}', text_line): return True
+
+    # 连续大写字母常见于水印（3个或以上）
+    if re.search(r'[A-Z]{3,}', text_line) and len(text_line) < 20: return True
+
+    # 计算重复字符比例，如果过高则认为是干扰
+    if len(text_line) >= 6:
+        char_counts = {}
+        for c in text_line:
+            char_counts[c] = char_counts.get(c, 0) + 1
+        max_repeat = max(char_counts.values())
+        if max_repeat / len(text_line) > 0.4:  # 某字符占比超过40%
+            return True
+
     return False
 
 def extract_text_only(pdf_path):
