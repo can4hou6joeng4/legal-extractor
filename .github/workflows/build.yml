@@ -143,8 +143,12 @@ jobs:
       - name: Build Wails App
         run: |
           # 强制清理并重构前端，确保资源是最新的
-          cd frontend && npm run build && cd ..
-          wails build -platform windows/amd64
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+          # 使用 -s 跳过 Wails 内置的前端构建，直接使用我们刚刚构建好的 dist
+          wails build -platform windows/amd64 -s
 
       - name: Inject Python Bridge (Windows)
         shell: powershell
