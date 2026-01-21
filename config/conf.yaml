@@ -1,7 +1,8 @@
 # Legal Extractor 配置文件
 # 支持通过环境变量覆盖，前缀为 LEGAL_EXTRACTOR_
-# 例如: LEGAL_EXTRACTOR_MCP_BIN=npx
+# 例如: LEGAL_EXTRACTOR_BAIDU_API_KEY=xxx
 
-mcp:
-  bin: "npx"    # MCP 服务启动命令
-  args: ["-y", "@modelcontextprotocol/server-ocr"]   # 命令参数
+baidu:
+  app_id: "121896201" # 百度 AI AppID
+  api_key: "YB6jwgUKe8AYF7SBuWu5Gxqd" # 百度 AI API Key
+  secret_key: "S8pwNvJrJMbAm5pQAwE4DSrX3WAnlPJh" # 百度 AI Secret Key
