@@ -20,6 +20,15 @@ build/pdf_extractor_core/
 
 # System Files
 .DS_Store
+.claude/
+
+# Project Documentation & AI Config (Local Only)
+ARCHITECTURE.md
+CLAUDE.md
+
+# Build Scripts (Local Only)
+*.sh
+*.ps1
 
 # Python Environment
 .venv/
