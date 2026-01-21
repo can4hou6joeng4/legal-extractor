@@ -120,6 +120,13 @@ func ExportExcel(path string, records []Record) error {
 	}
 
 	// 2. Set values
+	wrapStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			WrapText: true,
+			Vertical: "top",
+		},
+	})
+
 	for i, r := range records {
 		row := i + 2
 		for j, k := range keys {
@@ -130,8 +137,14 @@ func ExportExcel(path string, records []Record) error {
 			if err := f.SetCellValue(sheetName, cell, r[k]); err != nil {
 				return err
 			}
+			// Apply wrap text style
+			f.SetCellStyle(sheetName, cell, cell, wrapStyle)
 		}
 	}
+
+	// Set column widths for better readability
+	f.SetColWidth(sheetName, "A", "B", 20)
+	f.SetColWidth(sheetName, "C", "D", 50)
 
 	if err := f.SaveAs(path); err != nil {
 		return err
