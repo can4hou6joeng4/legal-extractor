@@ -43,7 +43,10 @@ RUN go mod download
 # 复制后端源码
 COPY . .
 
-# 复制前端构建产物到嵌入目录（如果需要）
+# 重要：创建必要的配置占位符，防止 internal/config/config.go 的 //go:embed 报错
+RUN mkdir -p internal/config && touch internal/config/baked_conf.yaml
+
+# 重要：确保前端构建产物被复制到后端 embed 期望的路径
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # 构建 Web 服务
