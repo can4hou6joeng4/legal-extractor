@@ -13,10 +13,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat-square&logo=go" alt="Go Version">
+  <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go Version">
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?style=flat-square&logo=vue.js" alt="Vue Version">
   <img src="https://img.shields.io/badge/Wails-2.x-DF0000?style=flat-square" alt="Wails Version">
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Docker-blue?style=flat-square" alt="Platform">
 </p>
 
 ---
@@ -25,23 +25,24 @@
 
 - 📄 **Smart Parsing** - Auto-detect structure of `.docx` and `.pdf` legal documents
 - 🎯 **Precise Extraction** - Extract key fields like defendant, ID, requests, and facts
+- 🌐 **Web & Desktop** - Dual-mode architecture supporting both Native Desktop (Wails) and Web Browser (Docker)
 - 👁️ **Live Preview** - Preview data before extraction to ensure accuracy
 - 💾 **Multi-format Export** - Support Excel (.xlsx), CSV, and JSON
-- 🖥️ **Cross-platform** - Native support for macOS and Windows
+- 🚀 **REST API** - Provide standard HTTP API for file extraction and export
+- 🐳 **Docker Ready** - Built-in Docker support for easy deployment
 - 🎨 **Modern UI** - Dark theme with Glassmorphism design
-- 🔧 **OCR Support** - Optional MCP OCR for scanned documents
 
 ---
 
 ## 🚀 Quick Start
 
-### 🅰️ Desktop Version (Recommended)
+### 🅰️ Desktop Version (Recommended for Individuals)
 
 1. Download the installer for your platform from [Releases](https://github.com/can4hou6joeng4/legal-extractor/releases)
 2. **macOS**: Download `.dmg`, open and drag to Applications
 3. **Windows**: Run `legal-extractor_setup.exe` installer
 
-### 🅱️ Web Version (Docker)
+### 🅱️ Web Version (Recommended for Teams/Servers)
 
 Run the following command to start the Web version instantly:
 
@@ -69,9 +70,10 @@ docker-compose up -d
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.24+
 - Node.js 18+
-- [Wails CLI](https://wails.io/docs/gettingstarted/installation)
+- [Wails CLI](https://wails.io/docs/gettingstarted/installation) (For Desktop)
+- Docker & Docker Compose (For Web)
 
 ### Setup
 
@@ -86,24 +88,49 @@ cd frontend && npm install && cd ..
 
 ### Dev Mode
 
+#### Desktop (Wails)
 ```bash
 wails dev
 ```
 
+#### Web (Backend + Frontend)
+For full stack development with hot reload:
+
+1. **Start Backend (Go)**
+   ```bash
+   # Install Air for hot reload
+   go install github.com/air-verse/air@latest
+
+   # Run
+   air
+   ```
+
+2. **Start Frontend (Vite)**
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+   Open http://localhost:5173 (API requests will be proxied to backend)
+
 ---
 
-## ⚙️ OCR Configuration (Optional)
+## ⚙️ Configuration
 
-This project supports OCR via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+### Baidu OCR (Required for PDF/Image)
 
+The project uses Baidu PaddleOCR-VL for high-precision document analysis.
+
+**Option 1: Environment Variables (Recommended for Docker)**
+- `LEGAL_EXTRACTOR_BAIDU_API_KEY`
+- `LEGAL_EXTRACTOR_BAIDU_SECRET_KEY`
+
+**Option 2: Configuration File**
 Create `config/conf.yaml` in the root directory:
 
 ```yaml
-mcp:
-  bin: "npx"
-  args:
-    - "-y"
-    - "@modelcontextprotocol/server-ocr"
+baidu:
+  api_key: "your_api_key"
+  secret_key: "your_secret_key"
 ```
 
 ---
@@ -112,14 +139,18 @@ mcp:
 
 ```
 legal-extractor/
+├── cmd/
+│   └── server/          # Web Server Entrypoint (REST API)
 ├── internal/            # Core logic
-│   ├── app/             # Backend API bindings
+│   ├── app/             # Desktop App Logic (Wails bindings)
 │   ├── config/          # Configuration management
-│   ├── extractor/       # Extraction & Export engines
-│   └── mcp/             # OCR Client
-├── frontend/            # Vue 3 Frontend
+│   ├── extractor/       # Extraction Engine (PDF/DOCX/OCR)
+├── frontend/            # Vue 3 Frontend (Adaptive UI)
+│   ├── src/services/    # API Adapter (Web/Desktop)
 ├── build/               # Build assets & installers
-└── RELEASE_NOTES_v1.0.0.md
+├── Dockerfile           # Web Version Dockerfile
+├── docker-compose.yml   # Docker Compose Config
+└── README.md
 ```
 
 ---
@@ -142,5 +173,5 @@ legal-extractor/
 ---
 
 <p align="center">
-  <sub>Made with ❤️ using <a href="https://wails.io">Wails</a></sub>
+  <sub>Made with ❤️ using <a href="https://wails.io">Wails</a> & <a href="https://vuejs.org/">Vue 3</a></sub>
 </p>
