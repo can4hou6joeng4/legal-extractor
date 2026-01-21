@@ -25,6 +25,7 @@ build/pdf_extractor_core/
 # Project Documentation & AI Config (Local Only)
 ARCHITECTURE.md
 CLAUDE.md
+internal/config/baked_conf.yaml
 
 # Build Scripts (Local Only)
 *.sh
