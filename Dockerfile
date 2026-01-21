@@ -23,15 +23,17 @@ RUN npm run build || (npm run build -- --skipLibCheck)
 # ============================================
 # 阶段 2: 后端构建
 # ============================================
-FROM golang:1.24-alpine AS backend-builder
+# 使用 rc-alpine 以支持最新的 Go 版本 (如 1.24)
+FROM golang:rc-alpine AS backend-builder
 
 # 安装必要的构建工具
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# 设置 Go 代理（加速中国区构建）
-ENV GOPROXY=https://goproxy.cn,direct
+# 设置 Go 代理（支持构建参数注入，CI 环境可留空）
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY}
 
 # 复制 go.mod 和 go.sum
 COPY go.mod go.sum ./
