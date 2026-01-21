@@ -175,6 +175,12 @@ jobs:
           # 收集所有产物到根目录
           find release-assets -type f \( -name "*.dmg" -o -name "*.exe" \) -exec cp {} final-assets/ \;
 
+          # 收集对应的 Release Notes MD 文件作为资产
+          VERSION_FILE="docs/releases/${{ github.ref_name }}.md"
+          if [ -f "$VERSION_FILE" ]; then
+            cp "$VERSION_FILE" final-assets/
+          fi
+
           echo "📋 Final assets to upload:"
           ls -lah final-assets/
 
@@ -182,9 +188,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: final-assets/*
-          # 注意：这里假设 RELEASE_NOTES 会由脚本生成或手动编辑，或者简单地使用 git log
-          # 为简单起见，这里使用自动生成的 Release Notes
-          generate_release_notes: true
+          # 使用精心编写的 MD 文件作为 Release 的正文内容
+          body_path: docs/releases/${{ github.ref_name }}.md
+          generate_release_notes: false
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
