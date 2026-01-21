@@ -40,3 +40,4 @@ docs/plans/
 
 # Debug Tools
 internal/extractor/bridge_bin/debug_pdf.py
+config/conf.yaml

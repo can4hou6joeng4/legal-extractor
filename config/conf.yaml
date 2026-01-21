@@ -1,8 +1,0 @@
-# Legal Extractor 配置文件
-# 支持通过环境变量覆盖，前缀为 LEGAL_EXTRACTOR_
-# 例如: LEGAL_EXTRACTOR_BAIDU_API_KEY=xxx
-
-baidu:
-  app_id: "121896201" # 百度 AI AppID
-  api_key: "YB6jwgUKe8AYF7SBuWu5Gxqd" # 百度 AI API Key
-  secret_key: "S8pwNvJrJMbAm5pQAwE4DSrX3WAnlPJh" # 百度 AI Secret Key
