@@ -1,0 +1,44 @@
+# LegalExtractor Web 版 Docker Compose 配置
+
+version: '3.8'
+
+services:
+  legal-extractor-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: legal-extractor-web
+    ports:
+      - "8080:8080"
+    environment:
+      # 服务端口
+      - PORT=8080
+      # 百度 API 配置（通过环境变量注入，更安全）
+      - BAIDU_API_KEY=${BAIDU_API_KEY:-}
+      - BAIDU_SECRET_KEY=${BAIDU_SECRET_KEY:-}
+      # 时区
+      - TZ=Asia/Shanghai
+    volumes:
+      # 挂载配置文件（可选，也可以使用环境变量）
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # 可选：Nginx 反向代理（生产环境推荐）
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: legal-extractor-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - legal-extractor-web
+  #   restart: unless-stopped
