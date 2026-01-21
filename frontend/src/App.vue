@@ -175,8 +175,10 @@ async function handleExtract() {
         </div>
         <div class="loading-content">
           <h3 class="loading-title">正在处理中...</h3>
-          <p class="loading-desc" v-if="selectedFile.toLowerCase().endsWith('.pdf')">正在进行智能 OCR 识别，请耐心等待</p>
-          <p class="loading-desc" v-else>正在解析文档结构</p>
+          <p class="loading-desc" v-if="selectedFile.toLowerCase().endsWith('.pdf')">
+            正在进行文档智能解析，请稍候...
+          </p>
+          <p class="loading-desc" v-else>正在解析本地文档结构...</p>
         </div>
       </div>
     </Transition>
