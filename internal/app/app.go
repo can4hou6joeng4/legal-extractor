@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -69,8 +70,14 @@ func (a *App) ScanFields(inputFile string) ([]FieldOption, error) {
 		return nil, fmt.Errorf("no file selected")
 	}
 
+	// 适配器层：负责读取本地文件
+	fileData, err := os.ReadFile(inputFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %v", err)
+	}
+
 	// 提取数据并检测字段（PDF 和 DOCX 都使用统一接口）
-	records, err := a.extractor.ExtractData(inputFile, []string{"defendant", "idNumber", "request", "factsReason"})
+	records, err := a.extractor.ExtractData(fileData, inputFile, []string{"defendant", "idNumber", "request", "factsReason"})
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract data: %v", err)
 	}
@@ -147,8 +154,17 @@ func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) Extra
 		}
 	}
 
+	// 适配器层：负责读取本地文件
+	fileData, err := os.ReadFile(inputPath)
+	if err != nil {
+		return ExtractResult{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to read file: %v", err),
+		}
+	}
+
 	// 1. Extract Data
-	records, err := a.extractor.ExtractData(inputPath, fields)
+	records, err := a.extractor.ExtractData(fileData, inputPath, fields)
 	if err != nil {
 		// 转换特定错误码
 		errMsg := err.Error()
@@ -214,7 +230,16 @@ func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
 		}
 	}
 
-	records, err := a.extractor.ExtractData(inputPath, fields)
+	// 适配器层：负责读取本地文件
+	fileData, err := os.ReadFile(inputPath)
+	if err != nil {
+		return ExtractResult{
+			Success:      false,
+			ErrorMessage: fmt.Sprintf("Failed to read file: %v", err),
+		}
+	}
+
+	records, err := a.extractor.ExtractData(fileData, inputPath, fields)
 	if err != nil {
 		return ExtractResult{
 			Success:      false,

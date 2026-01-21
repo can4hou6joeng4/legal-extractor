@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -36,13 +37,17 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 type Record map[string]string
 
 // ExtractData 根据文件类型选择提取策略
-func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, error) {
-	ext := strings.ToLower(filepath.Ext(inputFile))
+// 参数说明：
+//   - fileData: 文件的二进制内容（支持内存数据，便于 Web 版集成）
+//   - fileName: 文件名（用于判断文件类型和缓存键）
+//   - fields: 需要提取的字段列表
+func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []string) ([]Record, error) {
+	ext := strings.ToLower(filepath.Ext(fileName))
 
-	// 1. 检查缓存
+	// 1. 检查缓存（使用 fileName 作为缓存键）
 	e.cacheMu.RLock()
-	if cached, ok := e.cache[inputFile]; ok {
-		e.logger.Info("命中缓存结果，跳过 API 调用", "file", inputFile)
+	if cached, ok := e.cache[fileName]; ok {
+		e.logger.Info("命中缓存结果，跳过 API 调用", "file", fileName)
 		e.cacheMu.RUnlock()
 		return cached, nil
 	}
@@ -53,11 +58,11 @@ func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, er
 
 	switch ext {
 	case ".pdf", ".jpg", ".png", ".jpeg":
-		e.logger.Info("使用云端百度 AI 提取数据", "file", inputFile)
-		records, err = e.extractViaCloud(inputFile)
+		e.logger.Info("使用云端百度 AI 提取数据", "file", fileName)
+		records, err = e.extractViaCloud(fileData, fileName)
 	case ".docx":
-		e.logger.Info("使用本地原生逻辑提取 DOCX", "file", inputFile)
-		records, err = e.extractFromDocx(inputFile, fields)
+		e.logger.Info("使用本地原生逻辑提取 DOCX", "file", fileName)
+		records, err = e.extractFromDocx(fileData, fields)
 	default:
 		return nil, fmt.Errorf("不支持的文件格式: %s", ext)
 	}
@@ -68,16 +73,16 @@ func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, er
 
 	// 2. 写入缓存
 	e.cacheMu.Lock()
-	e.cache[inputFile] = records
+	e.cache[fileName] = records
 	e.cacheMu.Unlock()
 
 	return records, nil
 }
 
 // extractViaCloud 调用百度云 API 进行提取
-func (e *Extractor) extractViaCloud(path string) ([]Record, error) {
+func (e *Extractor) extractViaCloud(fileData []byte, fileName string) ([]Record, error) {
 	// 1. 调用百度 API 获取结构化 Markdown
-	markdown, err := e.baiduClient.ParseDocument(path)
+	markdown, err := e.baiduClient.ParseDocument(fileData, fileName)
 	if err != nil {
 		e.logger.Error("云端提取失败", "error", err)
 		return nil, err
@@ -93,8 +98,8 @@ func (e *Extractor) extractViaCloud(path string) ([]Record, error) {
 }
 
 // extractFromDocx 保留原有的本地 DOCX 提取逻辑
-func (e *Extractor) extractFromDocx(path string, fields []string) ([]Record, error) {
-	text, err := extractTextFromDocx(path)
+func (e *Extractor) extractFromDocx(fileData []byte, fields []string) ([]Record, error) {
+	text, err := extractTextFromDocx(fileData)
 	if err != nil {
 		return nil, err
 	}
@@ -109,12 +114,11 @@ func (e *Extractor) extractFromDocx(path string, fields []string) ([]Record, err
 }
 
 // extractTextFromDocx 核心 DOCX 文本提取逻辑
-func extractTextFromDocx(path string) (string, error) {
-	r, err := zip.OpenReader(path)
+func extractTextFromDocx(fileData []byte) (string, error) {
+	r, err := zip.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
 	if err != nil {
 		return "", err
 	}
-	defer r.Close()
 
 	var documentXML io.ReadCloser
 	for _, f := range r.File {

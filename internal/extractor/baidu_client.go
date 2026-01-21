@@ -8,8 +8,6 @@ import (
 	"legal-extractor/internal/config"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -139,12 +137,11 @@ type QueryResponse struct {
 }
 
 // ParseDocument 调用百度 PaddleOCR-VL 异步解析文档并返回 Markdown 结果
-func (c *BaiduClient) ParseDocument(filePath string) (string, error) {
-	// 1. 读取并转 Base64
-	fileData, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("读取文件失败: %w", err)
-	}
+// 参数说明：
+//   - fileData: 文件的二进制内容（支持内存数据，便于 Web 版集成）
+//   - fileName: 文件名（用于百度 API 识别文件类型）
+func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, error) {
+	// 1. 转 Base64
 	base64Data := base64.StdEncoding.EncodeToString(fileData)
 
 	token, err := c.GetAccessToken()
@@ -156,7 +153,6 @@ func (c *BaiduClient) ParseDocument(filePath string) (string, error) {
 	// URL: https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task
 	taskURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task?access_token=" + token
 
-	fileName := filepath.Base(filePath)
 	payload := url.Values{}
 	payload.Set("file_data", base64Data)
 	payload.Set("file_name", fileName)
