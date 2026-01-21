@@ -23,8 +23,7 @@ RUN npm run build || (npm run build -- --skipLibCheck)
 # ============================================
 # 阶段 2: 后端构建
 # ============================================
-# 使用 rc-alpine 以支持最新的 Go 版本 (如 1.24)
-FROM golang:rc-alpine AS backend-builder
+FROM golang:1.24-alpine AS backend-builder
 
 # 安装必要的构建工具
 RUN apk add --no-cache git ca-certificates tzdata
