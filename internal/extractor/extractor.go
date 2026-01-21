@@ -9,65 +9,106 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"encoding/json"
-	"os"
-	"os/exec"
-	"runtime"
+	"sync"
 )
 
-// Extractor handles document extraction logic
+// Extractor 处理器，负责协调不同格式的提取策略
 type Extractor struct {
-	logger *slog.Logger
+	logger      *slog.Logger
+	baiduClient *BaiduClient
+	cache       map[string][]Record
+	cacheMu     sync.RWMutex
 }
 
-// NewExtractor creates a new Extractor instance
+// NewExtractor 创建一个新的提取器实例
 func NewExtractor(logger *slog.Logger) *Extractor {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Extractor{
-		logger: logger,
+		logger:      logger,
+		baiduClient: NewBaiduClient(),
+		cache:       make(map[string][]Record),
 	}
 }
 
-// Record represents a single extracted case as a flexible map
+// Record 代表一条提取的记录
 type Record map[string]string
 
-// PythonBridgeResponse represents the JSON response from Python script
-type PythonBridgeResponse struct {
-	Path      string   `json:"path"`
-	Records   []Record `json:"records"`
-	Count     int      `json:"count"`
-	Status    string   `json:"status"`
-	Error     string   `json:"error,omitempty"`
-	IsOCRUsed bool     `json:"is_ocr_used"`
-}
-
-// ExtractData extracts records from a file
+// ExtractData 根据文件类型选择提取策略
 func (e *Extractor) ExtractData(inputFile string, fields []string) ([]Record, error) {
 	ext := strings.ToLower(filepath.Ext(inputFile))
 
-	switch ext {
-	case ".pdf":
-		return e.extractFromPDF(inputFile)
-	case ".docx":
-		// 对于 DOCX，仍使用原有逻辑
-		text, err := extractTextFromDocx(inputFile)
-		if err != nil {
-			return nil, fmt.Errorf("error extracting text from docx: %w", err)
-		}
-		if len(fields) == 0 {
-			for k := range PatternRegistry {
-				fields = append(fields, k)
-			}
-		}
-		return e.parseCases(text, fields), nil
-	default:
-		return nil, fmt.Errorf("unsupported file extension: %s", ext)
+	// 1. 检查缓存
+	e.cacheMu.RLock()
+	if cached, ok := e.cache[inputFile]; ok {
+		e.logger.Info("命中缓存结果，跳过 API 调用", "file", inputFile)
+		e.cacheMu.RUnlock()
+		return cached, nil
 	}
+	e.cacheMu.RUnlock()
+
+	var records []Record
+	var err error
+
+	switch ext {
+	case ".pdf", ".jpg", ".png", ".jpeg":
+		e.logger.Info("使用云端百度 AI 提取数据", "file", inputFile)
+		records, err = e.extractViaCloud(inputFile)
+	case ".docx":
+		e.logger.Info("使用本地原生逻辑提取 DOCX", "file", inputFile)
+		records, err = e.extractFromDocx(inputFile, fields)
+	default:
+		return nil, fmt.Errorf("不支持的文件格式: %s", ext)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 写入缓存
+	e.cacheMu.Lock()
+	e.cache[inputFile] = records
+	e.cacheMu.Unlock()
+
+	return records, nil
 }
 
+// extractViaCloud 调用百度云 API 进行提取
+func (e *Extractor) extractViaCloud(path string) ([]Record, error) {
+	// 1. 调用百度 API 获取结构化 Markdown
+	markdown, err := e.baiduClient.ParseDocument(path)
+	if err != nil {
+		e.logger.Error("云端提取失败", "error", err)
+		return nil, err
+	}
+
+	// 2. 使用 Markdown 解析器转换为 Record
+	records := ParseMarkdown(markdown)
+	if records == nil {
+		return nil, fmt.Errorf("未能从文档中提取到有效字段")
+	}
+
+	return records, nil
+}
+
+// extractFromDocx 保留原有的本地 DOCX 提取逻辑
+func (e *Extractor) extractFromDocx(path string, fields []string) ([]Record, error) {
+	text, err := extractTextFromDocx(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(fields) == 0 {
+		for k := range PatternRegistry {
+			fields = append(fields, k)
+		}
+	}
+
+	return e.parseCases(text, fields), nil
+}
+
+// extractTextFromDocx 核心 DOCX 文本提取逻辑
 func extractTextFromDocx(path string) (string, error) {
 	r, err := zip.OpenReader(path)
 	if err != nil {
@@ -117,143 +158,9 @@ func extractTextFromDocx(path string) (string, error) {
 	return sb.String(), nil
 }
 
-// getBinaryPath 查找编译好的 pdf_extractor_core 二进制
-// 返回二进制路径，如果找不到则返回空字符串
-func (e *Extractor) getBinaryPath() string {
-	exePath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	exeDir := filepath.Dir(exePath)
-	cwd, _ := os.Getwd()
-
-	// 根据操作系统确定二进制文件名
-	binaryName := "pdf_extractor_core"
-	if runtime.GOOS == "windows" {
-		binaryName = "pdf_extractor_core.exe"
-	}
-
-	// 检查的路径列表（按优先级排序）
-	searchPaths := []string{
-		// macOS App Bundle: Contents/Resources/bridge_bin/
-		filepath.Join(exeDir, "..", "Resources", "bridge_bin", binaryName),
-		// Windows/Linux 扁平结构: bridge_bin/
-		filepath.Join(exeDir, "bridge_bin", binaryName),
-		// 开发模式: internal/extractor/bridge_bin/
-		filepath.Join(cwd, "internal", "extractor", "bridge_bin", binaryName),
-	}
-
-	for _, p := range searchPaths {
-		if _, err := os.Stat(p); err == nil {
-			e.logger.Info("Found compiled binary", "path", p)
-			return p
-		}
-	}
-
-	return ""
-}
-
-// getBridgePaths returns the python executable and script paths depending on the environment
-// This is used as a fallback when the compiled binary is not available (development mode)
-func (e *Extractor) getBridgePaths() (string, string, error) {
-	// 1. Get current executable path
-	exePath, err := os.Executable()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get executable path: %w", err)
-	}
-	exeDir := filepath.Dir(exePath)
-
-	// Define possible locations for the bridge_bin directory
-	// Priority 1: macOS App Bundle Resources (Production)
-	// Structure: legal-extractor.app/Contents/MacOS/legal-extractor -> ../Resources/bridge_bin
-	prodResourcePath := filepath.Join(exeDir, "..", "Resources", "bridge_bin")
-
-	// Priority 2: Relative to CWD (Development / Source)
-	// Structure: ./internal/extractor/bridge_bin
-	cwd, _ := os.Getwd()
-	devResourcePath := filepath.Join(cwd, "internal", "extractor", "bridge_bin")
-
-	var bridgeDir string
-
-	// Check if we are running inside an App Bundle with Resources
-	if _, err := os.Stat(filepath.Join(prodResourcePath, "pdf_bridge.py")); err == nil {
-		e.logger.Info("Using Production Bridge Path", "path", prodResourcePath)
-		bridgeDir = prodResourcePath
-	} else if _, err := os.Stat(filepath.Join(devResourcePath, "pdf_bridge.py")); err == nil {
-		e.logger.Info("Using Development Bridge Path", "path", devResourcePath)
-		bridgeDir = devResourcePath
-	} else {
-		// Fallback: Check relative to executable directly (Linux/Windows flat binary)
-		flatPath := filepath.Join(exeDir, "bridge_bin")
-		if _, err := os.Stat(filepath.Join(flatPath, "pdf_bridge.py")); err == nil {
-			e.logger.Info("Using Flat Binary Bridge Path", "path", flatPath)
-			bridgeDir = flatPath
-		} else {
-			return "", "", fmt.Errorf("bridge directory not found. Checked: %s, %s, %s", prodResourcePath, devResourcePath, flatPath)
-		}
-	}
-
-	scriptPath := filepath.Join(bridgeDir, "pdf_bridge.py")
-	pythonPath := filepath.Join(bridgeDir, ".venv", "bin", "python3")
-
-	// On Windows, python executable might be in Scripts/python.exe
-	if runtime.GOOS == "windows" {
-		pythonPath = filepath.Join(bridgeDir, ".venv", "Scripts", "python.exe")
-	}
-
-	return pythonPath, scriptPath, nil
-}
-
-// extractFromPDF 使用 Python Bridge 提取 PDF 字段
-// 优先使用编译好的 pdf_extractor_core 二进制，如果不存在则 fallback 到 Python 脚本
-func (e *Extractor) extractFromPDF(path string) ([]Record, error) {
-	var cmd *exec.Cmd
-
-	// 优先尝试使用编译好的二进制
-	binaryPath := e.getBinaryPath()
-	if binaryPath != "" {
-		e.logger.Info("Extracting PDF using compiled binary", "binary", binaryPath)
-		cmd = exec.Command(binaryPath, path)
-	} else {
-		// Fallback: 使用 Python 脚本（开发模式或二进制缺失）
-		e.logger.Info("Compiled binary not found, falling back to Python script")
-		pythonPath, scriptPath, err := e.getBridgePaths()
-		if err != nil {
-			return nil, fmt.Errorf("no extraction method available: %w", err)
-		}
-		e.logger.Info("Extracting PDF using Python Bridge", "script", scriptPath, "interpreter", pythonPath)
-		cmd = exec.Command(pythonPath, scriptPath, path)
-	}
-
-	output, err := cmd.Output()
-	if err != nil {
-		// 尝试获取标准错误输出
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			e.logger.Error("Extraction execution failed", "stderr", string(exitErr.Stderr))
-			return nil, fmt.Errorf("extraction failed: %s", string(exitErr.Stderr))
-		}
-		return nil, fmt.Errorf("failed to execute extraction: %w", err)
-	}
-
-	// 解析 JSON 响应
-	var response PythonBridgeResponse
-	if err := json.Unmarshal(output, &response); err != nil {
-		e.logger.Error("Failed to parse response", "output", string(output))
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// 检查状态
-	if response.Status != "success" {
-		return nil, fmt.Errorf("extraction failed: %s", response.Error)
-	}
-
-	e.logger.Info("Successfully extracted PDF fields", "count", response.Count)
-	return response.Records, nil
-}
-
+// parseCases 现有的本地正则解析逻辑 (用于 DOCX)
 func (e *Extractor) parseCases(text string, fields []string) []Record {
 	parts := DefaultPatterns.Split.Split(text, -1)
-
 	var data []Record
 
 	for _, part := range parts {
@@ -262,62 +169,35 @@ func (e *Extractor) parseCases(text string, fields []string) []Record {
 		}
 
 		record := make(Record)
-
-		// Create a quick lookup for selected fields
 		fieldSet := make(map[string]bool)
 		for _, f := range fields {
 			fieldSet[f] = true
 		}
 
-		// 1. Extract Defendant (Commonly used as primary identifier)
+		// 1. 提取被告
 		if fieldSet["defendant"] {
 			loc := DefaultPatterns.DefStart.FindStringIndex(part)
 			if loc != nil {
 				startIdx := loc[1]
 				remaining := part[startIdx:]
-
-				// 先移除所有换行和多余空格，获取一个连续的文本段
-				// 这可以处理PDF中每个字符间有换行的情况
 				cleanRemaining := strings.ReplaceAll(remaining, "\n", "")
-				cleanRemaining = strings.ReplaceAll(cleanRemaining, "\r", "")
-
-				// 在清洗后的文本中查找结束位置
 				locEnd := DefaultPatterns.DefEnd.FindStringIndex(cleanRemaining)
 
 				var name string
 				if locEnd != nil {
 					name = cleanRemaining[:locEnd[0]]
 				} else {
-					// 如果没找到结束标记，尝试取前面一段（假设姓名不会超过50个字符）
 					if len(cleanRemaining) > 50 {
 						name = cleanRemaining[:50]
 					} else {
 						name = cleanRemaining
 					}
-					// 尝试在这段文本中找到第一个非姓名字符
-					for i, r := range name {
-						if r == '性' || r == '男' || r == '女' || r == '生' || r == '住' || r == '联' {
-							name = name[:i]
-							break
-						}
-					}
 				}
-
-				// 清洗提取的姓名
-				name = strings.Trim(name, " ,，、:：；;\t")
-				// 移除可能的干扰词（如"被告"重复）
-				name = strings.TrimPrefix(name, "被告")
-				name = strings.TrimSpace(name)
-				record["defendant"] = name
-			} else {
-				match := DefaultPatterns.DefFallback.FindStringSubmatch(part)
-				if len(match) > 1 {
-					record["defendant"] = strings.TrimSpace(match[1])
-				}
+				record["defendant"] = strings.TrimSpace(name)
 			}
 		}
 
-		// 2. Extract ID
+		// 2. 提取身份证
 		if fieldSet["idNumber"] {
 			matchID := DefaultPatterns.ID.FindStringSubmatch(part)
 			if len(matchID) > 1 {
@@ -325,7 +205,7 @@ func (e *Extractor) parseCases(text string, fields []string) []Record {
 			}
 		}
 
-		// 3. Extract Request
+		// 3. 提取请求
 		if fieldSet["request"] {
 			matchReq := DefaultPatterns.Request.FindStringSubmatch(part)
 			if len(matchReq) > 1 {
@@ -333,7 +213,7 @@ func (e *Extractor) parseCases(text string, fields []string) []Record {
 			}
 		}
 
-		// 4. Extract Facts
+		// 4. 提取事实
 		if fieldSet["factsReason"] {
 			matchFact := DefaultPatterns.Facts.FindStringSubmatch(part)
 			if len(matchFact) > 1 {
@@ -341,16 +221,7 @@ func (e *Extractor) parseCases(text string, fields []string) []Record {
 			}
 		}
 
-		// If at least one field is non-empty, add the record
-		hasData := false
-		for _, val := range record {
-			if val != "" {
-				hasData = true
-				break
-			}
-		}
-
-		if hasData {
+		if len(record) > 0 {
 			data = append(data, record)
 		}
 	}
@@ -379,13 +250,13 @@ func smartMerge(s string) string {
 	rePreserveBefore := regexp.MustCompile(`\n(\s*(?:[一二三四五六七八九十\d]+[、．]|[(（][一二三四五六七八九十\d]+[)）]))`)
 	s = rePreserveBefore.ReplaceAllString(s, "[LOGICAL_NL]$1")
 
-	// 3. 将剩余的所有普通换行符替换为空格（彻底合并）
-	s = strings.ReplaceAll(s, "\n", "")
+	// 3. 合并 OCR 碎行：将剩余的非逻辑换行符替换为一个小空格，防止文字粘连
+	s = strings.ReplaceAll(s, "\n", " ")
 
-	// 4. 将占位符还原为真正的换行
+	// 4. 将占位符还原为真正的换行符
 	s = strings.ReplaceAll(s, "[LOGICAL_NL]", "\n")
 
-	// 5. 深度清理：合并每行内部的多余空格，并去除字词间的冗余
+	// 5. 深度清理：合并每行内部的多余空格
 	lines := strings.Split(s, "\n")
 	var resultLines []string
 	for _, line := range lines {
@@ -393,9 +264,9 @@ func smartMerge(s string) string {
 		if trimmed == "" {
 			continue
 		}
-		// 将行内多余空格合并并剔除
+		// 压缩行内连续空格，但保留单个空格
 		fields := strings.Fields(trimmed)
-		resultLines = append(resultLines, strings.Join(fields, ""))
+		resultLines = append(resultLines, strings.Join(fields, " "))
 	}
 
 	return strings.Join(resultLines, "\n")

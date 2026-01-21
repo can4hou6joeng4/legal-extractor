@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"legal-extractor/internal/app"
+	"legal-extractor/internal/config"
 	"legal-extractor/internal/extractor"
 
 	"github.com/wailsapp/wails/v2"
@@ -18,8 +19,12 @@ import (
 var assets embed.FS
 
 func main() {
+	// 1. 初始化配置文件 (V2.0 重要步骤)
+	if err := config.Init(""); err != nil {
+		println("Error loading config:", err.Error())
+	}
 
-	// Initialize Extractor
+	// 2. Initialize Extractor
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	ext := extractor.NewExtractor(logger)
 
