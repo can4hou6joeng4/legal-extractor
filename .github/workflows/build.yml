@@ -43,7 +43,10 @@ jobs:
 
       - name: Build Wails App
         run: |
-          # V2.0 纯 Go 架构构建：无需 Python 依赖
+          # V2.0 纯 Go 架构构建：处理本地忽略的嵌入文件
+          mkdir -p internal/config
+          touch internal/config/baked_conf.yaml
+
           cd frontend
           npm install
           npm run build
@@ -121,6 +124,7 @@ jobs:
       - name: Build Wails App
         shell: powershell
         run: |
+          New-Item -ItemType File -Path "internal/config/baked_conf.yaml" -Force
           cd frontend
           npm install
           npm run build
