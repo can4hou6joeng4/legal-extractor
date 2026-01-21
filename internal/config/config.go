@@ -67,29 +67,51 @@ func Init(configPath string) error {
 	}
 
 	// 尝试读取配置文件
-	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// 磁盘上不存在配置文件，尝试加载内置的“烘焙”配置
-			if len(bakedConfig) > 0 {
-				v.SetConfigType("yaml")
-				if err := v.ReadConfig(bytes.NewBuffer(bakedConfig)); err != nil {
-					fmt.Printf("[⚠️ 警告] 加载内置配置失败: %v\n", err)
-				} else {
-					fmt.Println("[ℹ️ 提示] 正在使用内置预设配置运行")
-				}
-			}
+	err = v.ReadInConfig()
 
-			// 如果内置配置也为空，或者加载失败，则尝试创建默认配置模板
-			if v.GetString("baidu.api_key") == "" {
-				defaultPath := filepath.Join(baseDir, "config", "conf.yaml")
-				if err := ensureConfigFile(defaultPath); err != nil {
-					return fmt.Errorf("创建默认配置失败: %w", err)
-				}
-				v.SetConfigFile(defaultPath)
-				_ = v.ReadInConfig()
-			}
+	// 判断是否需要加载内置配置 (Baked Config)
+	// 触发条件：
+	// 1. 本地配置文件不存在 (ConfigFileNotFoundError)
+	// 2. 或者本地文件存在，但 API Key 为空 (说明是初始模板)
+	useBaked := false
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			useBaked = true
 		} else {
 			return fmt.Errorf("读取配置文件失败: %w", err)
+		}
+	} else {
+		// 文件读取成功，检查是否为空配置
+		if v.GetString("baidu.api_key") == "" {
+			fmt.Println("[ℹ️ 提示] 本地配置未设置 API Key，尝试加载内置配置...")
+			useBaked = true
+		}
+	}
+
+	// 加载内置配置
+	if useBaked && len(bakedConfig) > 0 {
+		// 注意：如果之前ReadInConfig成功但内容为空，这里ReadConfig(baked)会覆盖它
+		// 如果是混合场景（本地有AppID但没Key），建议使用MergeConfig，但为简单起见，
+		// 这里假设BakedConfig是完整的备用方案。
+		v.SetConfigType("yaml")
+		if loadErr := v.MergeConfig(bytes.NewBuffer(bakedConfig)); loadErr != nil {
+			fmt.Printf("[⚠️ 警告] 加载内置配置失败: %v\n", loadErr)
+		} else {
+			fmt.Println("[ℹ️ 提示] 已加载内置预设配置 (baked_conf.yaml)")
+		}
+	}
+
+	// 如果最终 API Key 仍然为空，且之前是因为文件不存在才进来的，则创建默认模板
+	if v.GetString("baidu.api_key") == "" {
+		// 仅当本地文件确实不存在时才创建，避免覆盖用户已有的（虽然可能是空的）文件
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			defaultPath := filepath.Join(baseDir, "config", "conf.yaml")
+			if createErr := ensureConfigFile(defaultPath); createErr != nil {
+				return fmt.Errorf("创建默认配置失败: %w", createErr)
+			}
+			// 再次尝试读取刚创建的文件（虽然它是空的，但为了保持状态一致）
+			v.SetConfigFile(defaultPath)
+			_ = v.ReadInConfig()
 		}
 	}
 

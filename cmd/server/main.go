@@ -207,10 +207,18 @@ func handleExtract(c echo.Context) error {
 	// 5. 调用核心提取逻辑
 	records, err := extractorInstance.ExtractData(fileData, file.Filename, fields)
 	if err != nil {
+		fmt.Printf("提取失败: %v\n", err)
 		return c.JSON(http.StatusInternalServerError, ExtractResponse{
 			Success: false,
 			Error:   fmt.Sprintf("提取失败: %v", err),
 		})
+	}
+
+	fmt.Printf("提取成功，记录数: %d\n", len(records))
+	if len(records) > 0 {
+		fmt.Printf("第一条记录示例: %+v\n", records[0])
+	} else {
+		fmt.Println("警告: 返回了空记录列表")
 	}
 
 	// 6. 获取字段标签
