@@ -1,37 +1,29 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { ExtractToPath, PreviewData, ExportData, SelectOutputPath } from "../wailsjs/go/app/App";
+import { api, downloadBlob, type Record, type ExtractResult } from "./services";
 import MainDropZone from "./components/MainDropZone.vue";
 import ConfigPanel from "./components/ConfigPanel.vue";
 import ResultCard from "./components/ResultCard.vue";
 import PreviewTable from "./components/PreviewTable.vue";
 
-interface Record {
-  [key: string]: any;
-  defendant?: string;
-  idNumber?: string;
-  request?: string;
-  factsReason?: string;
-}
-
-interface ExtractResult {
-  success: boolean;
-  recordCount: number;
-  outputPath: string;
-  errorMessage?: string;
-  records?: Record[];
-  fieldLabels?: Record;
-}
-
 // State
-const selectedFile = ref<string>("");
+const selectedFile = ref<string | File | null>(null);
 const selectedFields = ref<string[]>([]);
-const fieldLabels = ref<Record>({});
+const fieldLabels = ref<{ [key: string]: string }>({});
 const selectedFormat = ref<"xlsx" | "csv" | "json">("xlsx");
 const outputOutputPath = ref<string>("");
-const fileName = computed(() =>
-  selectedFile.value ? selectedFile.value.split("/").pop() || "" : "",
-);
+
+const fileName = computed(() => {
+  if (!selectedFile.value) return "";
+  if (typeof selectedFile.value === "string") {
+    // Desktop path
+    return selectedFile.value.split(/[\\/]/).pop() || "";
+  } else {
+    // Web File object
+    return selectedFile.value.name;
+  }
+});
+
 const isLoading = ref(false);
 const result = ref<ExtractResult | null>(null);
 const previewRecords = ref<Record[]>([]);
@@ -53,7 +45,7 @@ function showNotification(
   }, 3000);
 }
 
-function handleFileUpdate(file: string) {
+function handleFileUpdate(file: string | File) {
   selectedFile.value = file;
   // Reset state when file changes
   outputOutputPath.value = "";
@@ -68,7 +60,7 @@ async function handlePreview() {
 
   isLoading.value = true;
   try {
-    const res = await (PreviewData as any)(
+    const res = await api.service.previewData(
       selectedFile.value,
       selectedFields.value,
     );
@@ -76,10 +68,12 @@ async function handlePreview() {
       previewRecords.value = res.records;
       fieldLabels.value = res.fieldLabels || {};
       showPreview.value = true;
+    } else if (res.errorMessage) {
+      showNotification(res.errorMessage, "error");
     }
   } catch (e) {
     console.error("Preview failed:", e);
-    showNotification("预览失败", "error");
+    showNotification("预览失败: " + (e as Error).message, "error");
   } finally {
     isLoading.value = false;
   }
@@ -93,57 +87,112 @@ async function handleExtract() {
 
   try {
     const defaultExt = selectedFormat.value;
-    const defaultName = `提取结果_${fileName.value.split('.')[0]}.${defaultExt}`;
+    const baseName = fileName.value.includes('.')
+      ? fileName.value.substring(0, fileName.value.lastIndexOf('.'))
+      : fileName.value;
+    const defaultName = `提取结果_${baseName}.${defaultExt}`;
 
-    // 逻辑优化：优先使用用户在界面上选择的路径
-    // 只有当 outputOutputPath 为空时，才弹出选择框
-    let finalOutputPath = outputOutputPath.value;
+    let finalOutputPath = "";
 
-    if (!finalOutputPath) {
-       finalOutputPath = await (SelectOutputPath as any)(defaultName);
-    }
+    // 仅 Desktop 模式需要选择输出路径
+    if (api.isDesktop) {
+      // 逻辑优化：优先使用用户在界面上选择的路径
+      // 只有当 outputOutputPath 为空时，才弹出选择框
+      finalOutputPath = outputOutputPath.value;
 
-    if (!finalOutputPath) {
-      isLoading.value = false;
-      return;
-    }
-
-    let res;
-    // 如果用户已经在预览区编辑了数据，直接使用导出口
-    if (previewRecords.value.length > 0) {
-      res = await (ExportData as any)(
-        previewRecords.value,
-        finalOutputPath
-      );
-    } else {
-      // 否则运行完整提取流程
-      res = await (ExtractToPath as any)(
-        selectedFile.value,
-        finalOutputPath,
-        selectedFields.value,
-      );
-    }
-
-    result.value = res;
-    if (res.success) {
-      showNotification("提取成功！已保存至 " + res.outputPath, "success");
-    } else {
-      if (res.errorMessage === "PDF_ENCRYPTED_OR_LOCKED") {
-        showNotification("该 PDF 已加密或受限，无法解析", "error");
-      } else {
-        showNotification(res.errorMessage || "提取失败", "error");
+      if (!finalOutputPath) {
+        try {
+          finalOutputPath = await api.service.selectOutputPath(defaultName);
+          if (finalOutputPath) {
+            outputOutputPath.value = finalOutputPath;
+          } else {
+            // 用户取消选择
+            isLoading.value = false;
+            return;
+          }
+        } catch (e) {
+          console.error("Select output path failed:", e);
+          showNotification("选择保存路径失败", "error");
+          isLoading.value = false;
+          return;
+        }
       }
     }
-  } catch (e: any) {
+
+    // 调用提取接口
+    // Web 模式下 finalOutputPath 为空，后端仅提取数据，前端负责导出
+    const res = await api.service.extractToPath(
+      selectedFile.value,
+      finalOutputPath,
+      selectedFields.value,
+    );
+
+    if (res.success) {
+      // Desktop 模式：文件已保存
+      // Web 模式：需要触发下载
+      if (api.isWeb && res.records) {
+        try {
+          const blob = await api.service.exportData(res.records, selectedFormat.value) as Blob;
+          downloadBlob(blob, defaultName);
+          res.outputPath = "浏览器下载目录"; // 更新 UI 显示
+        } catch (err) {
+          showNotification("导出文件失败: " + (err as Error).message, "error");
+        }
+      }
+
+      result.value = res;
+      showNotification(`提取成功！共 ${res.recordCount} 条记录`, "success");
+    } else {
+      result.value = {
+        success: false,
+        recordCount: 0,
+        outputPath: "",
+        errorMessage: res.errorMessage || "未知错误",
+      };
+      showNotification(res.errorMessage || "提取失败", "error");
+    }
+  } catch (e) {
+    console.error("Extraction failed:", e);
     result.value = {
       success: false,
       recordCount: 0,
       outputPath: "",
-      errorMessage: e.message || "Unknown error",
+      errorMessage: (e as Error).message,
     };
+    showNotification("提取过程发生错误", "error");
   } finally {
     isLoading.value = false;
   }
+}
+
+async function handleSelectOutputPath() {
+  // Web 模式不支持选择输出路径
+  if (api.isWeb) return;
+
+  try {
+    const path = await api.service.selectOutputPath("");
+    if (path) {
+      outputOutputPath.value = path;
+    }
+  } catch (e) {
+    console.error("Select output path failed:", e);
+  }
+}
+
+async function handleOpenFile(path: string) {
+  // Web 模式不支持打开本地文件
+  if (api.isWeb) return;
+
+  try {
+    await api.service.openFile(path);
+  } catch (e) {
+    console.error("Open file failed:", e);
+    showNotification("打开文件失败", "error");
+  }
+}
+
+function handleFieldsChange(fields: string[]) {
+  selectedFields.value = fields;
 }
 </script>
 

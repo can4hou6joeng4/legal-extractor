@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import { SelectOutputPath, ScanFields } from "../../wailsjs/go/app/App";
+import { api } from "../services";
 
 const props = defineProps<{
-  selectedFile: string;
+  selectedFile: string | File;
   fileName: string;
   selectedFormat: "xlsx" | "csv" | "json";
   outputOutputPath: string;
@@ -45,9 +45,9 @@ watch(
     availableFields.value = []; 
     
     try {
-      const fields = await ScanFields(newFile);
+      const fields = await api.service.scanFields(newFile);
       availableFields.value = fields || [];
-      
+
       if (fields && fields.length > 0) {
         emit("update:selectedFields", fields.map((f: any) => f.key));
       } else {
@@ -79,13 +79,15 @@ function toggleField(key: string) {
 
 async function handleSelectOutput() {
   if (!props.selectedFile) return;
+  // Web 模式不支持选择输出路径
+  if (api.isWeb) return;
 
   const ext = props.selectedFormat;
   const baseName =
     (props.fileName || "document.doc").replace(/\.[^/.]+$/, "") + "." + ext;
 
   try {
-    const path = await SelectOutputPath(baseName);
+    const path = await api.service.selectOutputPath(baseName);
     if (path) {
       emit("update:outputOutputPath", path);
       if (path.toLowerCase().endsWith(".json"))

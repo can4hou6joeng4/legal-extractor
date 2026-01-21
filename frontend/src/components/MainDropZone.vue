@@ -1,15 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
-import { SelectFile } from "../../wailsjs/go/app/App";
-import { OnFileDrop, OnFileDropOff } from "../../wailsjs/runtime/runtime";
+import { ref, onMounted, onUnmounted, computed } from "vue";
+import { api } from "../services";
+// 动态导入 Wails 运行时，避免 Web 模式下报错（实际上 api.isDesktop 保护下不会执行，但为了安全）
+// 注意：在 Vite 构建中，import 可能会被静态分析，所以这里保留原有导入，但在运行时做判断
 
 const props = defineProps<{
-  selectedFile: string;
+  selectedFile: string | File | null;
   fileName: string;
 }>();
 
+const displayPath = computed(() => {
+  if (!props.selectedFile) return "";
+  if (typeof props.selectedFile === "string") {
+    return props.selectedFile;
+  } else {
+    // Web File object: display size
+    const size = props.selectedFile.size;
+    if (size < 1024) return size + " B";
+    if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
+    return (size / (1024 * 1024)).toFixed(1) + " MB";
+  }
+});
+
 const emit = defineEmits<{
-  (e: "update:selectedFile", value: string): void;
+  (e: "update:selectedFile", value: string | File): void;
   (
     e: "notification",
     message: string,
@@ -19,43 +33,74 @@ const emit = defineEmits<{
 
 const isDragging = ref(false);
 
-function setFile(file: string) {
+function setFile(file: string | File) {
   emit("update:selectedFile", file);
 }
 
-// Wails 原生拖拽处理
-onMounted(() => {
-  OnFileDrop((x: number, y: number, paths: string[]) => {
-    isDragging.value = false;
-    if (paths && paths.length > 0) {
-      const filePath = paths[0];
-      const lowerPath = filePath.toLowerCase();
-      if (lowerPath.endsWith(".docx") || lowerPath.endsWith(".pdf")) {
-        setFile(filePath);
-        emit("notification", "文件已加载", "success");
-      } else {
-        emit(
-          "notification",
-          "不支持的文件格式，请使用 .docx 或 .pdf 文件",
-          "error"
-        );
-      }
+// 桌面版：Wails 原生拖拽处理
+let cleanupWailsDrop: (() => void) | null = null;
+
+onMounted(async () => {
+  if (api.isDesktop) {
+    try {
+      const { OnFileDrop, OnFileDropOff } = await import("../../wailsjs/runtime/runtime");
+      OnFileDrop((x: number, y: number, paths: string[]) => {
+        isDragging.value = false;
+        if (paths && paths.length > 0) {
+          const filePath = paths[0];
+          const lowerPath = filePath.toLowerCase();
+          if (lowerPath.endsWith(".docx") || lowerPath.endsWith(".pdf") || lowerPath.endsWith(".jpg") || lowerPath.endsWith(".png")) {
+            setFile(filePath);
+            emit("notification", "文件已加载", "success");
+          } else {
+            emit("notification", "不支持的文件格式", "error");
+          }
+        }
+      }, true);
+
+      cleanupWailsDrop = OnFileDropOff;
+    } catch (e) {
+      console.warn("Wails runtime not available:", e);
     }
-  }, true);
+  }
 });
 
 onUnmounted(() => {
-  OnFileDropOff();
+  if (cleanupWailsDrop) {
+    cleanupWailsDrop();
+  }
 });
+
+// Web 版：HTML5 拖拽处理
+function handleWebDrop(e: DragEvent) {
+  if (api.isDesktop) return; // 桌面版由 Wails 处理
+
+  isDragging.value = false;
+  const files = e.dataTransfer?.files;
+  if (files && files.length > 0) {
+    const file = files[0];
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".docx") || name.endsWith(".pdf") || name.endsWith(".jpg") || name.endsWith(".png")) {
+      setFile(file);
+      emit("notification", "文件已加载", "success");
+    } else {
+      emit("notification", "不支持的文件格式", "error");
+    }
+  }
+}
 
 async function handleSelectFile() {
   try {
-    const file = await SelectFile();
+    const file = await api.service.selectFile();
     if (file) {
       setFile(file);
     }
   } catch (e) {
     console.error("File selection failed:", e);
+    // 用户取消选择不报错
+    if ((e as Error).message !== "未选择文件") {
+       emit("notification", "选择文件失败", "error");
+    }
   }
 }
 </script>
@@ -66,6 +111,9 @@ async function handleSelectFile() {
     :class="{ 'is-dragging': isDragging, 'has-file': !!selectedFile }"
     style="--wails-drop-target: drop"
     @click="handleSelectFile"
+    @dragover.prevent="isDragging = true"
+    @dragleave.prevent="isDragging = false"
+    @drop.prevent="handleWebDrop"
   >
     <div class="drop-content">
       <div class="icon-wrapper">
