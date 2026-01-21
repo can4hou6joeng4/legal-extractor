@@ -296,7 +296,7 @@ async function handleSelectOutput() {
 /* Field Grid */
 .field-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   align-items: stretch; /* Ensure all items in a row have equal height */
 }
@@ -398,6 +398,7 @@ async function handleSelectOutput() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0; /* Allow shrinking for text-overflow */
 }
 
 /* Custom Select */
@@ -463,6 +464,7 @@ async function handleSelectOutput() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
 }
 
 .path-icon {
