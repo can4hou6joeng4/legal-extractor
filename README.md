@@ -35,11 +35,27 @@
 
 ## 🚀 Quick Start
 
-### Download
+### 🅰️ Desktop Version (Recommended)
 
 1. Download the installer for your platform from [Releases](https://github.com/can4hou6joeng4/legal-extractor/releases)
 2. **macOS**: Download `.dmg`, open and drag to Applications
 3. **Windows**: Run `legal-extractor_setup.exe` installer
+
+### 🅱️ Web Version (Docker)
+
+Run the following command to start the Web version instantly:
+
+```bash
+# 1. Set your Baidu API Key (Required for PDF/Image OCR)
+export BAIDU_API_KEY="your_api_key"
+export BAIDU_SECRET_KEY="your_secret_key"
+
+# 2. Start with Docker Compose
+docker-compose up -d
+
+# 3. Access in Browser
+# http://localhost:8080
+```
 
 ### Usage
 
