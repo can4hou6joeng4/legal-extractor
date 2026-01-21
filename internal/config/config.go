@@ -11,13 +11,14 @@ import (
 
 // Config 应用配置结构
 type Config struct {
-	MCP MCPConfig `mapstructure:"mcp"`
+	Baidu BaiduConfig `mapstructure:"baidu"`
 }
 
-// MCPConfig MCP OCR 服务配置
-type MCPConfig struct {
-	Bin  string   `mapstructure:"bin"`
-	Args []string `mapstructure:"args"`
+// BaiduConfig 百度 AI OCR 配置
+type BaiduConfig struct {
+	AppID     string `mapstructure:"app_id"`
+	APIKey    string `mapstructure:"api_key"`
+	SecretKey string `mapstructure:"secret_key"`
 }
 
 var (
@@ -31,8 +32,9 @@ func Init(configPath string) error {
 	v = viper.New()
 
 	// 设置默认值
-	v.SetDefault("mcp.bin", "")
-	v.SetDefault("mcp.args", []string{})
+	v.SetDefault("baidu.app_id", "")
+	v.SetDefault("baidu.api_key", "")
+	v.SetDefault("baidu.secret_key", "")
 
 	// 绑定环境变量 (前缀 LEGAL_EXTRACTOR_)
 	// 例如: LEGAL_EXTRACTOR_MCP_BIN=npx
@@ -89,11 +91,12 @@ func ensureConfigFile(configPath string) error {
 	// 写入默认配置
 	defaultConfig := `# Legal Extractor 配置文件
 # 支持通过环境变量覆盖，前缀为 LEGAL_EXTRACTOR_
-# 例如: LEGAL_EXTRACTOR_MCP_BIN=npx
+# 例如: LEGAL_EXTRACTOR_BAIDU_API_KEY=xxx
 
-mcp:
-  bin: ""    # MCP 服务启动命令，例如 "npx"
-  args: []   # 命令参数，例如 ["-y", "@modelcontextprotocol/server-ocr"]
+baidu:
+  app_id: ""     # 百度 AI AppID
+  api_key: ""    # 百度 AI API Key
+  secret_key: "" # 百度 AI Secret Key
 `
 	return os.WriteFile(configPath, []byte(defaultConfig), 0644)
 }
@@ -106,12 +109,12 @@ func Get() *Config {
 	return cfg
 }
 
-// GetMCP 获取 MCP 配置
-func GetMCP() MCPConfig {
+// GetBaidu 获取百度配置
+func GetBaidu() BaiduConfig {
 	if cfg == nil {
-		return MCPConfig{}
+		return BaiduConfig{}
 	}
-	return cfg.MCP
+	return cfg.Baidu
 }
 
 // LoadConfig 兼容旧 API，内部调用 Init
