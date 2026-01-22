@@ -127,12 +127,17 @@ async function handleSelectOutput() {
 
         <!-- Empty State -->
         <div v-else-if="!selectedFile" class="empty-state">
-           <span class="empty-icon">📂</span>
+           <span class="empty-icon">
+             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+           </span>
            <span>请先选择文件以分析可提取字段</span>
         </div>
-        
-        <div v-else-if="availableFields.length === 0" class="empty-state warning">
-           <span>⚠️ 未检测到可提取的字段</span>
+
+        <div v-else-if="availableFields.length === 0" class="empty-state warning" role="alert">
+           <span class="empty-icon warning-icon">
+             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+           </span>
+           <span>未检测到可提取的字段</span>
         </div>
 
         <!-- Field Grid -->
@@ -143,10 +148,11 @@ async function handleSelectOutput() {
             class="field-card"
             :class="{ active: selectedFields.includes(field.key) }"
           >
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               :checked="selectedFields.includes(field.key)"
               @change="toggleField(field.key)"
+              :aria-label="'选择字段: ' + field.label"
             >
             <div class="card-content">
                 <div class="icon-box">
@@ -177,6 +183,7 @@ async function handleSelectOutput() {
                :value="selectedFormat"
                @input="emit('update:selectedFormat', ($event.target as HTMLSelectElement).value)"
                class="custom-select"
+               aria-label="选择导出格式"
              >
                <option value="xlsx">Excel 表格 (.xlsx)</option>
                <option value="csv">CSV 文件 (.csv)</option>
@@ -192,8 +199,10 @@ async function handleSelectOutput() {
         <div class="config-cell flex-grow">
            <label class="cell-label">导出位置</label>
            <div class="path-input-group">
-               <div class="path-display" :class="{ placeholder: !outputOutputPath }" :title="outputOutputPath">
-                 <span class="path-icon">📂</span>
+               <div class="path-display" :class="{ placeholder: !outputOutputPath }" :title="outputOutputPath || '请选择保存位置'">
+                 <span class="path-icon">
+                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                 </span>
                  <span class="path-text">{{ outputOutputPath || "请选择保存位置..." }}</span>
                </div>
                <button class="btn-icon-only" @click="handleSelectOutput" title="更改位置">
@@ -385,7 +394,8 @@ async function handleSelectOutput() {
 
 .field-card:hover .card-content {
   background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 /* Grid Layout for config */
