@@ -152,7 +152,9 @@ jobs:
           npm run build
           cd ..
 
-          wails build -platform windows/amd64 -s
+          # 注入构建时间戳并构建原生应用
+          $BUILD_TIME = [int][double]::Parse((Get-Date -UFormat %s))
+          wails build -platform windows/amd64 -s -ldflags "-X 'legal-extractor/internal/config.BuildTime=$BUILD_TIME'"
 
       - name: Package Windows
         shell: powershell
