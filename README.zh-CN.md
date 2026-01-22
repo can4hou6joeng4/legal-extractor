@@ -121,6 +121,8 @@ wails dev
 
 本项目集成了百度 PaddleOCR-VL 大模型版面分析 API，用于处理复杂的 PDF 和扫描件。
 
+📖 **[点击查看详细配置指南](docs/user/CONFIG_GUIDE.md)** 了解如何获取 API 密钥。
+
 **方式 1: 环境变量 (推荐 Docker 使用)**
 - `LEGAL_EXTRACTOR_BAIDU_API_KEY`
 - `LEGAL_EXTRACTOR_BAIDU_SECRET_KEY`

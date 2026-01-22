@@ -121,6 +121,8 @@ For full stack development with hot reload:
 
 The project uses Baidu PaddleOCR-VL for high-precision document analysis.
 
+📖 **[Read the Full Configuration Guide](docs/user/CONFIG_GUIDE.md)** for detailed instructions on how to get your API keys.
+
 **Option 1: Environment Variables (Recommended for Docker)**
 - `LEGAL_EXTRACTOR_BAIDU_API_KEY`
 - `LEGAL_EXTRACTOR_BAIDU_SECRET_KEY`
