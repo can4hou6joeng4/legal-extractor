@@ -239,6 +239,14 @@ func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
 		}
 	}
 
+	// 检查文件内容是否为空
+	if len(fileData) == 0 {
+		return ExtractResult{
+			Success:      false,
+			ErrorMessage: "文件内容为空，请检查文件是否损坏",
+		}
+	}
+
 	records, err := a.extractor.ExtractData(fileData, inputPath, fields)
 	if err != nil {
 		return ExtractResult{
