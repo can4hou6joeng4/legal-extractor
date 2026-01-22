@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"legal-extractor/internal/config"
 	"legal-extractor/internal/extractor"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -29,6 +30,11 @@ func NewApp(e *extractor.Extractor) *App {
 // Startup is called when the app starts
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+}
+
+// GetTrialStatus 返回试用期状态
+func (a *App) GetTrialStatus() config.TrialStatus {
+	return config.GetTrialStatus()
 }
 
 // SelectFile opens a file dialog to select a .docx file
@@ -147,6 +153,15 @@ func (a *App) SelectOutputPath(defaultName string) (string, error) {
 
 // ExtractToPath processes the input file and saves to the specific output path
 func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) ExtractResult {
+	// 检查试用期状态
+	status := config.GetTrialStatus()
+	if status.IsExpired {
+		return ExtractResult{
+			Success:      false,
+			ErrorMessage: "试用期已结束（限 7 天），功能已锁定。请联系开发者获取正式版。",
+		}
+	}
+
 	if inputPath == "" || outputPath == "" {
 		return ExtractResult{
 			Success:      false,
@@ -223,6 +238,15 @@ func (a *App) ExportData(records []extractor.Record, outputPath string) ExtractR
 
 // PreviewData extracts and returns records for preview (without saving)
 func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
+	// 检查试用期状态
+	status := config.GetTrialStatus()
+	if status.IsExpired {
+		return ExtractResult{
+			Success:      false,
+			ErrorMessage: "试用期已结束（限 7 天），预览功能已锁定。请联系开发者获取正式版。",
+		}
+	}
+
 	if inputPath == "" {
 		return ExtractResult{
 			Success:      false,

@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { api, downloadBlob, type Record, type ExtractResult } from "./services";
 import MainDropZone from "./components/MainDropZone.vue";
 import ConfigPanel from "./components/ConfigPanel.vue";
 import ResultCard from "./components/ResultCard.vue";
 import PreviewTable from "./components/PreviewTable.vue";
+
+// Trial State
+interface TrialStatus {
+  isExpired: boolean;
+  remaining: number;
+  days: number;
+  hours: number;
+}
+
+const trialStatus = ref<TrialStatus | null>(null);
 
 // State
 const selectedFile = ref<string | File | null>(null);
@@ -35,6 +45,21 @@ const notification = ref<{
 } | null>(null);
 
 // Actions
+async function fetchTrialStatus() {
+  if (api.isDesktop) {
+    try {
+      const status = await (window as any).go.app.App.GetTrialStatus();
+      trialStatus.value = status;
+    } catch (e) {
+      console.error("Failed to fetch trial status:", e);
+    }
+  }
+}
+
+onMounted(() => {
+  fetchTrialStatus();
+});
+
 function showNotification(
   message: string,
   type: "success" | "error" | "info" = "info",
@@ -232,6 +257,18 @@ function handleFieldsChange(fields: string[]) {
       </div>
     </Transition>
 
+    <!-- Trial Banner -->
+    <div v-if="trialStatus && api.isDesktop" class="trial-banner" :class="{ 'expired': trialStatus.isExpired }">
+      <template v-if="!trialStatus.isExpired">
+        <span class="trial-icon">⏳</span>
+        <span class="trial-text">试用期剩余：<strong>{{ trialStatus.days }}</strong> 天 <strong>{{ trialStatus.hours }}</strong> 小时</span>
+      </template>
+      <template v-else>
+        <span class="trial-icon">❌</span>
+        <span class="trial-text">试用期已结束，核心功能已锁定。请联系开发者获取正式版。</span>
+      </template>
+    </div>
+
     <main class="main-content">
       <!-- Header -->
       <header class="header">
@@ -281,7 +318,7 @@ function handleFieldsChange(fields: string[]) {
           v-model:selectedFormat="selectedFormat"
           v-model:outputOutputPath="outputOutputPath"
           v-model:selectedFields="selectedFields"
-          :isLoading="isLoading"
+          :isLoading="isLoading || (trialStatus?.isExpired ?? false)"
           @preview="handlePreview"
           @extract="handleExtract"
         />
@@ -313,10 +350,50 @@ function handleFieldsChange(fields: string[]) {
   align-items: center;
   /* padding: var(--spacing-lg); */
   padding: 40px 20px;
+  padding-top: 60px; /* 为试用期横幅留出空间 */
   position: relative;
   overflow-x: hidden;
   height: 100vh; /* Fixed height to viewport */
   overflow-y: auto; /* Handle scrolling internally */
+}
+
+/* Trial Banner 试用期横幅 */
+.trial-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  z-index: 1000;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  transition: all 0.3s ease;
+}
+
+.trial-banner.expired {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.25) 0%, rgba(220, 38, 38, 0.25) 100%);
+  border-bottom-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.trial-icon {
+  font-size: 1.1rem;
+}
+
+.trial-text strong {
+  color: var(--accent-primary);
+  margin: 0 2px;
+}
+
+.trial-banner.expired .trial-text strong {
+  color: #fca5a5;
 }
 
 /* Background Blurs */

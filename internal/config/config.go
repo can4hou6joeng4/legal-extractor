@@ -9,7 +9,51 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"strconv"
+	"time"
 )
+
+var (
+	// BuildTime is injected via -ldflags at build time (Unix timestamp)
+	BuildTime string = ""
+)
+
+const TrialDurationDays = 7
+
+// TrialStatus represents the current trial state
+type TrialStatus struct {
+	IsExpired bool          `json:"isExpired"`
+	Remaining time.Duration `json:"remaining"` // Duration until expiry
+	Days      int           `json:"days"`      // Remaining whole days
+	Hours     int           `json:"hours"`     // Remaining hours (modulo days)
+}
+
+// GetTrialStatus calculates the remaining trial time
+func GetTrialStatus() TrialStatus {
+	if BuildTime == "" {
+		// Dev mode or local run without injection: no trial limit
+		return TrialStatus{IsExpired: false, Remaining: 999 * time.Hour}
+	}
+
+	bt, err := strconv.ParseInt(BuildTime, 10, 64)
+	if err != nil {
+		return TrialStatus{IsExpired: false}
+	}
+
+	expiryTime := time.Unix(bt, 0).AddDate(0, 0, TrialDurationDays)
+	remaining := time.Until(expiryTime)
+
+	if remaining <= 0 {
+		return TrialStatus{IsExpired: true, Remaining: 0}
+	}
+
+	return TrialStatus{
+		IsExpired: false,
+		Remaining: remaining,
+		Days:      int(remaining.Hours() / 24),
+		Hours:     int(remaining.Hours()) % 24,
+	}
+}
 
 //go:embed baked_conf.yaml
 var bakedConfig []byte
