@@ -51,9 +51,9 @@ temp/
 Thumbs.db
 desktop.ini
 
-# Wails 桌面版相关（Web 版不需要）
+# Wails 桌面版相关
 wails.json
-frontend/wailsjs/
+# frontend/wailsjs/  <-- 取消忽略，Web 版构建也需要这些类型定义和运行时文件
 
 # 其他
 *.bak
