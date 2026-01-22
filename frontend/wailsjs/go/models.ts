@@ -42,6 +42,7 @@ export namespace app {
 export namespace config {
 	
 	export class TrialStatus {
+	    isActivated: boolean;
 	    isExpired: boolean;
 	    remaining: number;
 	    days: number;
@@ -53,6 +54,7 @@ export namespace config {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.isActivated = source["isActivated"];
 	        this.isExpired = source["isExpired"];
 	        this.remaining = source["remaining"];
 	        this.days = source["days"];

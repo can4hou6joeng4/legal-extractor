@@ -22,14 +22,26 @@ const TrialDurationDays = 7
 
 // TrialStatus represents the current trial state
 type TrialStatus struct {
-	IsExpired bool          `json:"isExpired"`
-	Remaining time.Duration `json:"remaining"` // Duration until expiry
-	Days      int           `json:"days"`      // Remaining whole days
-	Hours     int           `json:"hours"`     // Remaining hours (modulo days)
+	IsActivated bool          `json:"isActivated"`
+	IsExpired   bool          `json:"isExpired"`
+	Remaining   time.Duration `json:"remaining"` // Duration until expiry
+	Days        int           `json:"days"`      // Remaining whole days
+	Hours       int           `json:"hours"`     // Remaining hours (modulo days)
 }
 
 // GetTrialStatus calculates the remaining trial time
 func GetTrialStatus() TrialStatus {
+	// 优先检查激活状态
+	if IsActivated() {
+		return TrialStatus{
+			IsActivated: true,
+			IsExpired:   false,
+			Remaining:   9999 * time.Hour,
+			Days:        999,
+			Hours:       0,
+		}
+	}
+
 	if BuildTime == "" {
 		// Dev mode or local run without injection: no trial limit
 		return TrialStatus{IsExpired: false, Remaining: 999 * time.Hour}

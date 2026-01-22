@@ -37,6 +37,24 @@ func (a *App) GetTrialStatus() config.TrialStatus {
 	return config.GetTrialStatus()
 }
 
+// GetMachineID 返回当前设备的唯一机器码
+func (a *App) GetMachineID() string {
+	return config.GetMachineID()
+}
+
+// Activate 验证并激活授权码
+func (a *App) Activate(licenseKey string) (bool, error) {
+	machineID := config.GetMachineID()
+	if config.VerifyLicense(machineID, licenseKey) {
+		err := config.SaveLicense(licenseKey)
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, fmt.Errorf("授权码无效，请检查后重试")
+}
+
 // SelectFile opens a file dialog to select a .docx file
 func (a *App) SelectFile() (string, error) {
 	file, err := wr.OpenFileDialog(a.ctx, wr.OpenDialogOptions{
