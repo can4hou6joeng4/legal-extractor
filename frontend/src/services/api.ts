@@ -61,6 +61,14 @@ export interface IApiService {
 
   // 打开文件（仅 Desktop 模式）
   openFile(path: string): Promise<void>;
+
+  // --- 授权相关接口 ---
+  // 获取试用状态
+  getTrialStatus(): Promise<any>;
+  // 获取机器码
+  getMachineID(): Promise<string>;
+  // 激活授权
+  activate(licenseKey: string): Promise<boolean>;
 }
 
 // ============================================
@@ -107,6 +115,21 @@ class DesktopAdapter implements IApiService {
   async openFile(path: string): Promise<void> {
     const { OpenFile } = await import('../../wailsjs/go/app/App');
     return OpenFile(path);
+  }
+
+  async getTrialStatus(): Promise<any> {
+    const { GetTrialStatus } = await import('../../wailsjs/go/app/App');
+    return GetTrialStatus();
+  }
+
+  async getMachineID(): Promise<string> {
+    const { GetMachineID } = await import('../../wailsjs/go/app/App');
+    return GetMachineID();
+  }
+
+  async activate(licenseKey: string): Promise<boolean> {
+    const { Activate } = await import('../../wailsjs/go/app/App');
+    return Activate(licenseKey);
   }
 }
 
@@ -206,7 +229,20 @@ class WebAdapter implements IApiService {
 
   async openFile(_path: string): Promise<void> {
     // Web 模式不支持打开本地文件
-    console.warn('Web 模式不支持打开本地文件');
+    console.warn('Web mode does not support opening local files');
+  }
+
+  async getTrialStatus(): Promise<any> {
+    // Web 模式默认不限制试用
+    return { isActivated: true, isExpired: false, days: 999, hours: 0 };
+  }
+
+  async getMachineID(): Promise<string> {
+    return 'WEB-MODE-NO-ID';
+  }
+
+  async activate(_licenseKey: string): Promise<boolean> {
+    return true;
   }
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
 import { api, downloadBlob, type Record, type ExtractResult } from "./services";
 import MainDropZone from "./components/MainDropZone.vue";
 import ConfigPanel from "./components/ConfigPanel.vue";
@@ -8,6 +8,7 @@ import PreviewTable from "./components/PreviewTable.vue";
 
 // Trial State
 interface TrialStatus {
+  isActivated: boolean;
   isExpired: boolean;
   remaining: number;
   days: number;
@@ -18,7 +19,18 @@ const trialStatus = ref<TrialStatus | null>(null);
 
 // State
 const selectedFile = ref<string | File | null>(null);
+const machineID = ref("");
+const licenseKey = ref("");
+const showActivationModal = ref(false);
 const selectedFields = ref<string[]>([]);
+
+// 4. Close modal clear input
+watch(showActivationModal, (newVal) => {
+  if (!newVal) {
+    licenseKey.value = "";
+  }
+});
+
 const fieldLabels = ref<{ [key: string]: string }>({});
 const selectedFormat = ref<"xlsx" | "csv" | "json">("xlsx");
 const outputOutputPath = ref<string>("");
@@ -35,6 +47,7 @@ const fileName = computed(() => {
 });
 
 const isLoading = ref(false);
+const loadingText = ref("");
 const result = ref<ExtractResult | null>(null);
 const previewRecords = ref<Record[]>([]);
 const showPreview = ref(false);
@@ -46,26 +59,83 @@ const notification = ref<{
 
 // Actions
 async function fetchTrialStatus() {
-  if (api.isDesktop) {
-    try {
-      const status = await (window as any).go.app.App.GetTrialStatus();
-      trialStatus.value = status;
-    } catch (e) {
-      console.error("Failed to fetch trial status:", e);
-    }
+  try {
+    const status = await api.service.getTrialStatus();
+    trialStatus.value = status;
+    // 同时获取机器码
+    const mid = await api.service.getMachineID();
+    machineID.value = mid;
+  } catch (e) {
+    console.error("Failed to fetch trial status:", e);
   }
+}
+
+// 2. License validation
+const isValidLicense = computed(() => {
+  const k = licenseKey.value.trim();
+  // Simple format check: XXXX-XXXX-XXXX-XXXX (approx 19 chars)
+  // We relax it slightly to allow loose input but prevent empty/short nonsense
+  return k.length >= 16;
+});
+
+async function handleActivate() {
+  const key = licenseKey.value.trim();
+  if (!key) return;
+
+  loadingText.value = "正在验证授权...";
+  isLoading.value = true;
+
+  // 5. 强制延迟 500ms 确保 Loading 动画渲染出来，避免被系统弹窗（如权限请求）打断渲染
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  try {
+    // 改用标准服务层调用
+    const success = await api.service.activate(key);
+
+    // Stop loading BEFORE showing success to prevent overlay conflict
+    isLoading.value = false;
+
+    if (success) {
+      showNotification("激活成功！感谢使用专业版", "success");
+      showActivationModal.value = false;
+      await fetchTrialStatus(); // 刷新 UI 状态
+    } else {
+      // 关键修复：增加失败反馈
+      showNotification("授权码无效，请检查后重试", "error");
+    }
+  } catch (e) {
+    isLoading.value = false;
+    showNotification(String(e), "error");
+  } finally {
+    // Redundant safety check
+    if (isLoading.value) isLoading.value = false;
+    loadingText.value = "";
+  }
+}
+
+function copyMachineID() {
+  navigator.clipboard.writeText(machineID.value);
+  showNotification("特征码已复制到剪贴板", "success");
 }
 
 onMounted(() => {
   fetchTrialStatus();
 });
 
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
 function showNotification(
   message: string,
   type: "success" | "error" | "info" = "info",
 ) {
+  // 1. Clear previous timer to prevent race conditions
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+
   notification.value = { message, type };
-  setTimeout(() => {
+  toastTimer = setTimeout(() => {
     notification.value = null;
   }, 3000);
 }
@@ -249,32 +319,41 @@ function handleFieldsChange(fields: string[]) {
         </div>
         <div class="loading-content">
           <h3 class="loading-title">正在处理中...</h3>
-          <p class="loading-desc" v-if="fileName.toLowerCase().endsWith('.pdf')">
-            正在进行文档智能解析，请稍候...
-          </p>
-          <p class="loading-desc" v-else>正在解析本地文档结构...</p>
+          <p class="loading-desc" v-if="loadingText">{{ loadingText }}</p>
+          <template v-else>
+            <p class="loading-desc" v-if="fileName.toLowerCase().endsWith('.pdf')">
+              正在进行文档智能解析，请稍候...
+            </p>
+            <p class="loading-desc" v-else>正在解析本地文档结构...</p>
+          </template>
         </div>
       </div>
     </Transition>
 
     <!-- Trial Banner -->
-    <div v-if="trialStatus && api.isDesktop" class="trial-banner" :class="{ 'expired': trialStatus.isExpired }" role="status" aria-live="polite">
+    <div v-if="trialStatus && api.isDesktop && !trialStatus.isActivated" class="trial-banner" :class="{ 'expired': trialStatus.isExpired }" role="status" aria-live="polite">
       <div class="trial-container">
         <template v-if="!trialStatus.isExpired">
           <span class="trial-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </span>
           <span class="trial-text">试用期剩余：<strong>{{ trialStatus.days }}</strong> 天 <strong>{{ trialStatus.hours }}</strong> 小时</span>
-          <button class="trial-cta-btn" @click="showNotification('请联系开发者获取授权码', 'info')">获取正式版</button>
+          <button class="trial-cta-btn" @click="showActivationModal = true">获取正式版</button>
         </template>
         <template v-else>
           <span class="trial-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
           </span>
           <span class="trial-text">试用期已结束，核心功能已锁定。</span>
-          <button class="trial-cta-btn urgent" @click="showNotification('请联系开发者获取正式版', 'info')">联系授权</button>
+          <button class="trial-cta-btn urgent" @click="showActivationModal = true">联系授权</button>
         </template>
       </div>
+    </div>
+
+    <!-- Professional Active Badge -->
+    <div v-if="trialStatus?.isActivated" class="active-badge-fixed">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>专业授权版</span>
     </div>
 
     <main class="main-content">
@@ -344,6 +423,46 @@ function handleFieldsChange(fields: string[]) {
         />
       </Transition>
     </main>
+
+    <!-- Activation Modal -->
+    <Transition name="fade">
+      <div v-if="showActivationModal" class="modal-overlay">
+        <div class="activation-card glass-panel">
+          <div class="modal-header">
+            <h2 class="font-heading">软件激活中心</h2>
+            <button class="close-btn" @click="showActivationModal = false">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <div class="info-section">
+              <label>您的设备特征码</label>
+              <div class="machine-id-box" @click="copyMachineID">
+                <code>{{ machineID }}</code>
+                <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </div>
+              <p class="helper-text">请将上方代码发送给开发者以获取授权码</p>
+            </div>
+
+            <div class="input-section">
+              <label>输入授权码</label>
+              <input
+                v-model="licenseKey"
+                type="text"
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                class="license-input"
+                @keyup.enter="handleActivate"
+              />
+            </div>
+
+            <button class="btn btn-primary btn-glow full-width" @click="handleActivate" :disabled="!isValidLicense">
+              立即激活专业版
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <footer class="footer">
       <p>Powered by Wails & Vue 3</p>
@@ -594,7 +713,7 @@ function handleFieldsChange(fields: string[]) {
   align-items: center;
   gap: 12px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-  z-index: 2000; /* 确保在横幅 (1000) 之上 */
+  z-index: 6000; /* Ensure it's above the modal (5000) */
   border: 1px solid rgba(255, 255, 255, 0.1);
   min-width: 320px;
 }
@@ -614,5 +733,196 @@ function handleFieldsChange(fields: string[]) {
 .toast-message {
   font-size: 0.95rem;
   color: var(--text-primary);
+}
+
+/* ============================
+   Activation Modal (New UI)
+   ============================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5000;
+}
+
+.activation-card {
+  width: 90%;
+  max-width: 440px;
+  padding: 40px;
+  border-radius: 24px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.9) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.modal-header h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.info-section label, .input-section label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.machine-id-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  padding: 14px 18px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center; /* 3. Centered */
+  position: relative;      /* For absolute positioning of icon */
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.machine-id-box:hover {
+  border-color: var(--accent-primary);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.machine-id-box code {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent-primary);
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.machine-id-box .copy-icon {
+  position: absolute;
+  right: 18px;
+  color: var(--text-secondary);
+}
+
+.license-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 14px 18px;
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem;
+  outline: none;
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.license-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
+}
+
+.full-width {
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem !important;
+}
+
+/* Professional Active Badge */
+.active-badge-fixed {
+  position: fixed;
+  top: 12px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 5500;
+  gap: 20px;
+}
+
+.loading-spinner {
+  color: var(--accent-primary);
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.loading-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 </style>

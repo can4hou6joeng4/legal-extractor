@@ -3,6 +3,8 @@ package config
 import (
 	"crypto/md5"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -48,5 +50,25 @@ func SaveLicense(code string) error {
 		return fmt.Errorf("config system not initialized")
 	}
 	v.Set("license_key", code)
+
+	// Fix: Config File "conf" Not Found error
+	// 如果 Viper 没有关联配置文件（说明启动时未找到文件），直接 WriteConfig 会报错
+	// 此时我们需要显式指定路径写入
+	if v.ConfigFileUsed() == "" {
+		exePath, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("failed to get executable path: %w", err)
+		}
+
+		// 默认写入路径: ./config/conf.yaml
+		configDir := filepath.Join(filepath.Dir(exePath), "config")
+		if err := os.MkdirAll(configDir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		configPath := filepath.Join(configDir, "conf.yaml")
+		return v.WriteConfigAs(configPath)
+	}
+
 	return v.WriteConfig()
 }
