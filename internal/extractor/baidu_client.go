@@ -14,6 +14,55 @@ import (
 	"time"
 )
 
+// BaiduAPIError 百度 API 错误类型，提供友好的用户提示
+type BaiduAPIError struct {
+	Code    int
+	Message string
+	Hint    string // 用户友好提示
+}
+
+func (e *BaiduAPIError) Error() string {
+	if e.Hint != "" {
+		return e.Hint
+	}
+	return fmt.Sprintf("[%d] %s", e.Code, e.Message)
+}
+
+// 错误码映射表：将百度 API 错误码转换为用户友好提示
+var errorCodeHints = map[int]string{
+	17:     "API 调用次数已达今日上限，请明日再试或升级套餐",
+	18:     "API 调用频率过快，请稍后重试",
+	19:     "API 调用总量已达上限，请升级套餐",
+	100:    "API 参数无效，请检查请求格式",
+	110:    "Access Token 已过期，正在自动刷新...",
+	111:    "Access Token 无效，请检查 API 密钥配置",
+	216200: "图片内容为空，请检查文件是否损坏或为空白页",
+	216201: "图片格式不支持，请使用 PDF/JPG/PNG 格式",
+	216202: "图片大小超限，请压缩后重试（建议 < 10MB）",
+	216630: "文档识别失败，请确保文档内容清晰可读",
+	216631: "文档页数超限，请分割后重试",
+	282000: "服务器内部错误，请稍后重试",
+}
+
+// translateError 将百度 API 错误转换为用户友好错误
+func translateError(code int, msg string) error {
+	hint, ok := errorCodeHints[code]
+	if !ok {
+		hint = fmt.Sprintf("百度 API 错误: %s", msg)
+	}
+	return &BaiduAPIError{Code: code, Message: msg, Hint: hint}
+}
+
+// isRetryableError 判断是否为可重试错误
+func isRetryableError(code int) bool {
+	retryableCodes := map[int]bool{
+		18:     true, // QPS 限制
+		110:    true, // Token 过期
+		282000: true, // 服务器内部错误
+	}
+	return retryableCodes[code]
+}
+
 // BaiduClient 百度 AI 客户端
 type BaiduClient struct {
 	config     config.BaiduConfig
@@ -135,57 +184,87 @@ type QueryResponse struct {
 // ParseDocument 调用百度 PaddleOCR-VL 异步解析文档并返回 Markdown 结果
 func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, error) {
 	if len(fileData) == 0 {
-		return "", fmt.Errorf("文件数据为空，无法提交到百度 API")
+		return "", &BaiduAPIError{Code: 0, Hint: "文件内容为空，请检查文件是否损坏"}
 	}
 
 	// 1. 转 Base64
 	base64Data := base64.StdEncoding.EncodeToString(fileData)
 
-	token, err := c.GetAccessToken()
-	if err != nil {
-		return "", err
+	// 带重试的任务提交
+	var taskID string
+	maxSubmitRetries := 3
+
+	for attempt := 1; attempt <= maxSubmitRetries; attempt++ {
+		token, err := c.GetAccessToken()
+		if err != nil {
+			return "", err
+		}
+
+		// 2. 提交任务
+		taskURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task?access_token=" + token
+
+		// 只传文件名，不传完整路径
+		baseName := filepath.Base(fileName)
+
+		// 构造 URL 编码后的 Payload 字符串
+		payloadString := fmt.Sprintf("file_data=%s&file_url=&file_name=%s&analysis_chart=false",
+			url.QueryEscape(base64Data),
+			url.QueryEscape(baseName),
+		)
+		payload := strings.NewReader(payloadString)
+
+		req, err := http.NewRequest("POST", taskURL, payload)
+		if err != nil {
+			return "", fmt.Errorf("创建提交任务请求失败: %w", err)
+		}
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Add("Accept", "application/json")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			if attempt < maxSubmitRetries {
+				time.Sleep(time.Duration(attempt) * time.Second)
+				continue
+			}
+			return "", fmt.Errorf("网络连接失败，请检查网络后重试: %w", err)
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+
+		var taskResp TaskResponse
+		if err := json.Unmarshal(body, &taskResp); err != nil {
+			return "", fmt.Errorf("解析任务响应失败: %w", err)
+		}
+
+		if taskResp.ErrorCode != 0 {
+			// Token 过期时清除缓存并重试
+			if taskResp.ErrorCode == 110 || taskResp.ErrorCode == 111 {
+				c.mu.Lock()
+				c.accessToken = ""
+				c.mu.Unlock()
+				if attempt < maxSubmitRetries {
+					continue
+				}
+			}
+			// 可重试错误
+			if isRetryableError(taskResp.ErrorCode) && attempt < maxSubmitRetries {
+				time.Sleep(time.Duration(attempt) * time.Second)
+				continue
+			}
+			return "", translateError(taskResp.ErrorCode, taskResp.ErrorMsg)
+		}
+
+		taskID = taskResp.Result.TaskID
+		break
 	}
 
-	// 2. 提交任务
-	taskURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task?access_token=" + token
-
-	// 只传文件名，不传完整路径
-	baseName := filepath.Base(fileName)
-
-	// 构造 URL 编码后的 Payload 字符串
-	payloadString := fmt.Sprintf("file_data=%s&file_url=&file_name=%s&analysis_chart=false",
-		url.QueryEscape(base64Data),
-		url.QueryEscape(baseName),
-	)
-	payload := strings.NewReader(payloadString)
-
-	req, err := http.NewRequest("POST", taskURL, payload)
-	if err != nil {
-		return "", fmt.Errorf("创建提交任务请求失败: %w", err)
+	if taskID == "" {
+		return "", &BaiduAPIError{Code: 0, Hint: "任务提交失败，请稍后重试"}
 	}
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Add("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("提交任务 HTTP 请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-
-	var taskResp TaskResponse
-	if err := json.Unmarshal(body, &taskResp); err != nil {
-		return "", fmt.Errorf("解析任务响应失败: %w", err)
-	}
-
-	if taskResp.ErrorCode != 0 {
-		return "", fmt.Errorf("提交任务业务错误: [%d] %s", taskResp.ErrorCode, taskResp.ErrorMsg)
-	}
-
-	taskID := taskResp.Result.TaskID
 
 	// 3. 轮询结果
+	token, _ := c.GetAccessToken()
 	queryURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task/query?access_token=" + token
 	maxRetries := 60 // 最多等待 120 秒
 	var markdownURL string
@@ -209,26 +288,30 @@ func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, e
 			markdownURL = queryResp.Result.MarkdownURL
 			break
 		} else if queryResp.Result.Status == "failed" {
-			return "", fmt.Errorf("百度解析任务执行失败: %s", queryResp.Result.TaskError)
+			taskErr := queryResp.Result.TaskError
+			if taskErr == "" {
+				taskErr = "文档解析失败"
+			}
+			return "", &BaiduAPIError{Code: 0, Hint: fmt.Sprintf("文档解析失败: %s，请确保文档内容清晰可读", taskErr)}
 		}
 
 		time.Sleep(2 * time.Second)
 	}
 
 	if markdownURL == "" {
-		return "", fmt.Errorf("解析任务超时")
+		return "", &BaiduAPIError{Code: 0, Hint: "文档解析超时，请尝试上传更小的文件或稍后重试"}
 	}
 
 	// 4. 下载 Markdown 内容
 	mResp, err := c.httpClient.Get(markdownURL)
 	if err != nil {
-		return "", fmt.Errorf("下载 Markdown 失败: %w", err)
+		return "", fmt.Errorf("下载解析结果失败: %w", err)
 	}
 	defer mResp.Body.Close()
 
 	mBody, err := io.ReadAll(mResp.Body)
 	if err != nil {
-		return "", fmt.Errorf("读取 Markdown 内容失败: %w", err)
+		return "", fmt.Errorf("读取解析结果失败: %w", err)
 	}
 
 	return string(mBody), nil
