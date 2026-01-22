@@ -2,9 +2,9 @@
 
 :root {
     /* ============================
-     Trust & Authority Palette (Dark Theme)
-     Target: Legal Extractor
-     ============================ */
+       Trust & Authority Palette (Dark Theme)
+       Target: Legal Extractor
+       ============================ */
 
     /* Fonts */
     --font-heading: 'EB Garamond', serif;
@@ -12,59 +12,43 @@
 
     /* Backgrounds */
     --bg-primary: #0F172A;
-    /* Slate 900 - Primary Background */
+    /* Slate 900 */
     --bg-secondary: #020617;
-    /* Slate 950 - Deeper Contrast */
+    /* Slate 950 */
 
     /* Text */
     --text-primary: #F8FAFC;
-    /* Slate 50 */
     --text-secondary: #CBD5E1;
-    /* Slate 300 - Higher Legibility */
     --text-muted: #64748B;
-    /* Slate 500 */
 
     /* Branding Colors */
     --accent-primary: #0EA5E9;
-    /* Sky 500 - Trustworthy Blue (Lighter for Dark Mode) */
+    /* Sky 500 */
     --accent-secondary: #334155;
-    /* Slate 700 - Professional Secondary */
 
-    /* Glows - More Subtle/Matte */
+    /* Glows */
     --accent-glow: rgba(14, 165, 233, 0.08);
     --accent-secondary-glow: rgba(51, 65, 85, 0.15);
 
     /* Functional Colors */
     --success: #10b981;
-    /* Emerald 500 - Kept as is, works well */
     --error: #ef4444;
-    /* Red 500 */
     --warning: #f59e0b;
-    /* Amber 500 */
     --info: #0EA5E9;
-    /* Sky 500 */
 
     /* Borders & Glass */
     --surface-border: rgba(148, 163, 184, 0.1);
-    /* Slate border */
     --glass-bg: rgba(15, 23, 42, 0.8);
-    /* Darker glass for readability */
 
     /* Spacing System */
     --spacing-xs: 0.5rem;
-    /* 8px */
     --spacing-sm: 1rem;
-    /* 16px */
     --spacing-md: 1.5rem;
-    /* 24px */
     --spacing-lg: 2rem;
-    /* 32px */
     --spacing-xl: 3rem;
-    /* 48px */
 
     /* BorderRadius */
     --radius-sm: 0.25rem;
-    /* Sharper corners for professional look */
     --radius-md: 0.5rem;
     --radius-lg: 0.75rem;
     --radius-xl: 1rem;
@@ -75,23 +59,10 @@
     --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ============================
-   Reset & Base Styles
-   ============================ */
-
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-}
-
-html,
-body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    /* Prevent body scroll (fix double scrollbar) */
 }
 
 body {
@@ -100,139 +71,32 @@ body {
     color: var(--text-primary);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
-#app {
-    width: 100%;
-    min-height: 100vh;
-}
-
-/* ============================
-   Typography Utilities
-   ============================ */
-
-.text-gradient-brand {
-    color: var(--accent-primary);
-    /* Professional solid color usually better for legal, but if gradient desired: */
-    background: linear-gradient(135deg, #38BDF8, #818CF8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    overflow-x: hidden;
 }
 
 .font-heading {
     font-family: var(--font-heading);
-    letter-spacing: -0.02em;
 }
 
-/* ============================
-   Component Classics 
-   (Global overrides or shared classes)
-   ============================ */
-
-/* Glass Panel Effect for Cards */
 .glass-panel {
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--surface-border);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
-        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
 
-/* Scrollbar Customization */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+/* 按钮基础样式优化 */
+.btn {
+    transition: var(--transition-normal);
+    cursor: pointer;
+    font-family: var(--font-body);
 }
 
-::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+.btn:hover {
+    transform: translateY(-2px);
 }
 
-::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
-}
-
-/* Selection */
-::selection {
-    background: var(--accent-primary);
-    color: white;
-}
-
-/* ============================
-   Reduced Motion Support
-   ============================ */
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-        scroll-behavior: auto !important;
-    }
-}
-
-/* ============================
-   Shared Animations
-   ============================ */
-@keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-}
-
-.blink {
-    animation: blink 1.5s ease-in-out infinite;
-}
-
-/* ============================
-   Loading Overlay
-   ============================ */
-.loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    gap: 20px;
-    pointer-events: all;
-}
-
-.loading-spinner {
-    color: var(--accent-primary);
-}
-
-.loading-content {
-    text-align: center;
-}
-
-.loading-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    margin-bottom: 8px;
-}
-
-.loading-desc {
-    color: var(--text-muted);
-    font-size: 0.9rem;
-}
-
-.animate-spin {
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+.btn:active {
+    transform: translateY(0);
 }

@@ -161,16 +161,17 @@ table {
 }
 
 th {
-  background: rgba(255, 255, 255, 0.03);
-  padding: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  padding: 14px 16px;
   text-align: left;
   font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-family: var(--font-heading);
+  color: var(--text-primary);
   position: sticky;
   top: 0;
   z-index: 10;
-  border-bottom: 1px solid var(--surface-border);
+  border-bottom: 2px solid var(--accent-primary);
 }
 
 td {
@@ -185,21 +186,21 @@ td {
 
 .edit-input {
   width: 100%;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-size: 0.9rem;
-  padding: 6px 8px;
-  transition: all 0.2s ease;
+  font-size: 0.95rem;
+  padding: 8px 10px;
+  transition: var(--transition-fast);
   outline: none;
-  font-family: inherit;
+  font-family: var(--font-body);
 }
 
 .edit-input:focus {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(14, 165, 233, 0.05);
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.2);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
 }
 
 .edit-input:hover:not(:focus) {

@@ -460,27 +460,41 @@ async function handleSelectOutput() {
   padding: 10px 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px; /* 稍微加大间距更专业 */
   font-size: 0.9rem;
   color: var(--text-primary);
   overflow: hidden;
+  height: 42px; /* 固定高度确保对齐一致性 */
 }
 
-.path-display.placeholder .path-text {
-  color: var(--text-muted);
-  font-style: italic;
+.path-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.path-icon svg {
+  display: block;
+  transform: translateY(0.5px); /* 微调图标视觉中心 */
 }
 
 .path-text {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-body); /* 换回 Lato 避免等宽字体带来的对齐问题 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  line-height: 1;
+  display: flex;
+  align-items: center;
 }
 
-.path-icon {
-  opacity: 0.7;
+.path-display.placeholder .path-text {
+  color: var(--text-muted);
+  font-style: normal; /* 取消斜体，斜体在 UI 路径中通常会破坏对齐感 */
+  font-size: 0.85rem;
 }
 
 .btn-icon-only {
@@ -544,6 +558,18 @@ async function handleSelectOutput() {
   border: none;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 140px;
+  line-height: 1; /* 修正文字垂直偏离 */
+}
+
+.btn-content, .btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-icon svg, .btn-content svg {
+  display: block;
 }
 
 .btn-primary.btn-glow {

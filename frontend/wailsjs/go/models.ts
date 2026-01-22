@@ -39,3 +39,26 @@ export namespace app {
 
 }
 
+export namespace config {
+	
+	export class TrialStatus {
+	    isExpired: boolean;
+	    remaining: number;
+	    days: number;
+	    hours: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrialStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.isExpired = source["isExpired"];
+	        this.remaining = source["remaining"];
+	        this.days = source["days"];
+	        this.hours = source["hours"];
+	    }
+	}
+
+}
+
