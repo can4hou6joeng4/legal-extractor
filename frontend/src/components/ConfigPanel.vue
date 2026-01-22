@@ -8,6 +8,7 @@ const props = defineProps<{
   selectedFormat: "xlsx" | "csv" | "json";
   outputOutputPath: string;
   isLoading: boolean;
+  isDisabled?: boolean;
   selectedFields: string[];
 }>();
 
@@ -78,7 +79,7 @@ function toggleField(key: string) {
 }
 
 async function handleSelectOutput() {
-  if (!props.selectedFile) return;
+  if (!props.selectedFile || props.isDisabled) return;
   // Web 模式不支持选择输出路径
   if (api.isWeb) return;
 
@@ -152,6 +153,7 @@ async function handleSelectOutput() {
               type="checkbox"
               :checked="selectedFields.includes(field.key)"
               @change="toggleField(field.key)"
+              :disabled="isDisabled"
               :aria-label="'选择字段: ' + field.label"
             >
             <div class="card-content">
@@ -201,7 +203,7 @@ async function handleSelectOutput() {
                  </span>
                  <span class="path-text">{{ outputOutputPath || "请选择保存位置..." }}</span>
                </div>
-               <button class="btn-icon-only" @click="handleSelectOutput" title="更改位置">
+               <button class="btn-icon-only" @click="handleSelectOutput" :disabled="isDisabled" title="更改位置">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                </button>
            </div>
@@ -214,7 +216,7 @@ async function handleSelectOutput() {
       <button
         class="btn btn-secondary"
         @click="emit('preview')"
-        :disabled="isLoading"
+        :disabled="isLoading || isDisabled"
       >
         <span class="btn-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -225,7 +227,7 @@ async function handleSelectOutput() {
       <button
         class="btn btn-primary btn-glow"
         @click="emit('extract')"
-        :disabled="isLoading || !outputOutputPath"
+        :disabled="isLoading || isDisabled || !outputOutputPath"
       >
         <span v-if="isLoading" class="loader"></span>
         <span v-else class="btn-content">
@@ -388,6 +390,12 @@ async function handleSelectOutput() {
   color: white;
 }
 
+.field-card input:disabled + .card-content {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .field-card:hover .card-content {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.15);
@@ -540,6 +548,12 @@ async function handleSelectOutput() {
 .btn-icon-only:hover {
   background: rgba(255, 255, 255, 0.15);
   border-color: var(--text-muted);
+}
+
+.btn-icon-only:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* Skeleton */

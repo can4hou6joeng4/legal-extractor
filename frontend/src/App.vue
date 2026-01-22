@@ -405,7 +405,8 @@ function handleFieldsChange(fields: string[]) {
           v-model:selectedFormat="selectedFormat"
           v-model:outputOutputPath="outputOutputPath"
           v-model:selectedFields="selectedFields"
-          :isLoading="isLoading || (trialStatus?.isExpired ?? false)"
+          :isLoading="isLoading"
+          :isDisabled="trialStatus?.isExpired ?? false"
           @preview="handlePreview"
           @extract="handleExtract"
         />
