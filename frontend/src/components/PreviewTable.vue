@@ -41,7 +41,10 @@ const columns = computed(() => {
         <h3>数据预览与编辑</h3>
       </div>
       <div class="header-right">
-        <span class="hint">💡 提取结果支持直接编辑修正</span>
+        <span class="hint">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hint-icon"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          提取结果支持直接编辑修正
+        </span>
         <span class="badge">{{ records.length }} 条记录</span>
       </div>
     </div>
@@ -64,6 +67,7 @@ const columns = computed(() => {
                   rows="3"
                   class="edit-input scroll-mini"
                   spellcheck="false"
+                  :aria-label="col.label + ' 输入框'"
                 ></textarea>
                 <input
                   v-else
@@ -71,6 +75,7 @@ const columns = computed(() => {
                   type="text"
                   class="edit-input"
                   spellcheck="false"
+                  :aria-label="col.label + ' 输入框'"
                 />
               </div>
             </td>
@@ -127,6 +132,13 @@ const columns = computed(() => {
 .hint {
   font-size: 0.75rem;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hint-icon {
+  opacity: 0.7;
 }
 
 .badge {
