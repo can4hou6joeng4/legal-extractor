@@ -66,7 +66,7 @@ async function handleOpenFile(path: string) {
           >
         </div>
       </div>
-      <div v-else class="result-body">
+      <div v-else class="result-body" role="alert" aria-live="assertive">
         <p class="error-msg">{{ result.errorMessage }}</p>
       </div>
     </div>
