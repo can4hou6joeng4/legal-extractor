@@ -420,12 +420,15 @@ async function handleSelectOutput() {
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
-  padding: 10px 14px;
+  padding: 0 14px; /* 调整内边距配合固定高度 */
   border-radius: 10px;
   font-size: 0.95rem;
   outline: none;
   cursor: pointer;
   transition: all 0.3s ease;
+  height: 40px; /* 统一高度标准 */
+  display: flex;
+  align-items: center;
 }
 
 .custom-select:hover, .custom-select:focus {
@@ -481,14 +484,14 @@ async function handleSelectOutput() {
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 0 14px;
   display: flex;
   align-items: center;
   gap: 10px; /* 稍微加大间距更专业 */
   font-size: 0.9rem;
   color: var(--text-primary);
   overflow: hidden;
-  height: 42px; /* 固定高度确保对齐一致性 */
+  height: 40px; /* 统一高度标准 */
 }
 
 .path-icon {
@@ -501,7 +504,6 @@ async function handleSelectOutput() {
 
 .path-icon svg {
   display: block;
-  transform: translateY(0.5px); /* 微调图标视觉中心 */
 }
 
 .path-text {
@@ -510,7 +512,7 @@ async function handleSelectOutput() {
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
-  line-height: 1;
+  line-height: 1.2;
   display: flex;
   align-items: center;
 }
@@ -522,8 +524,8 @@ async function handleSelectOutput() {
 }
 
 .btn-icon-only {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -565,7 +567,7 @@ async function handleSelectOutput() {
   display: flex;
   gap: 16px;
   justify-content: center;
-  margin-top: 32px;
+  margin-top: 16px; /* 缩小与配置区域的间距 */
 }
 
 .btn {

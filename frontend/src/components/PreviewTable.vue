@@ -106,7 +106,7 @@ const columns = computed(() => {
   display: flex;
   flex-direction: column;
   max-height: 600px;
-  margin-top: 20px;
+  margin-top: 0; /* 消除间距过宽问题 */
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 
