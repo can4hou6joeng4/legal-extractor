@@ -8,6 +8,8 @@ import (
 	"legal-extractor/internal/config"
 	"net/http"
 	"net/url"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -36,16 +38,14 @@ func NewBaiduClient() *BaiduClient {
 	return &BaiduClient{
 		config: config.GetBaidu(),
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 60 * time.Second, // 增加超时时间以应对大文件上传
 		},
 	}
 }
 
 // GetAccessToken 获取有效的 Access Token (带缓存机制)
 func (c *BaiduClient) GetAccessToken() (string, error) {
-	// 1. 尝试从缓存读取
 	c.mu.RLock()
-	// 提前 5 分钟过期，确保安全性
 	if c.accessToken != "" && time.Now().Before(c.expireTime.Add(-5*time.Minute)) {
 		token := c.accessToken
 		c.mu.RUnlock()
@@ -53,11 +53,9 @@ func (c *BaiduClient) GetAccessToken() (string, error) {
 	}
 	c.mu.RUnlock()
 
-	// 2. 缓存失效，加写锁重新获取
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 双重检查，防止并发请求导致多次刷新
 	if c.accessToken != "" && time.Now().Before(c.expireTime.Add(-5*time.Minute)) {
 		return c.accessToken, nil
 	}
@@ -73,13 +71,11 @@ func (c *BaiduClient) GetAccessToken() (string, error) {
 	return c.accessToken, nil
 }
 
-// fetchTokenFromAPI 从百度服务器请求新的 Token (按照官方 API 标准实现)
 func (c *BaiduClient) fetchTokenFromAPI() (string, int64, error) {
 	if c.config.APIKey == "" || c.config.SecretKey == "" {
 		return "", 0, fmt.Errorf("百度 API Key 或 Secret Key 未配置，请检查 config/conf.yaml")
 	}
 
-	// 官方标准：参数需放在 URL Query 中，并设置特定的 Header
 	apiURL := fmt.Sprintf("https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id=%s&client_secret=%s",
 		url.QueryEscape(c.config.APIKey), url.QueryEscape(c.config.SecretKey))
 
@@ -88,7 +84,6 @@ func (c *BaiduClient) fetchTokenFromAPI() (string, int64, error) {
 		return "", 0, fmt.Errorf("创建请求失败: %w", err)
 	}
 
-	// 增加官方要求的 Header
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
 
@@ -131,16 +126,18 @@ type QueryResponse struct {
 	ErrorCode int    `json:"error_code"`
 	ErrorMsg  string `json:"error_msg"`
 	Result    struct {
-		Status      string `json:"status"` // success, running, failed
+		Status      string `json:"status"`      // success, running, failed
+		TaskError   string `json:"task_error"`  // 任务失败时的具体错误信息
 		MarkdownURL string `json:"markdown_url"`
 	} `json:"result"`
 }
 
 // ParseDocument 调用百度 PaddleOCR-VL 异步解析文档并返回 Markdown 结果
-// 参数说明：
-//   - fileData: 文件的二进制内容（支持内存数据，便于 Web 版集成）
-//   - fileName: 文件名（用于百度 API 识别文件类型）
 func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, error) {
+	if len(fileData) == 0 {
+		return "", fmt.Errorf("文件数据为空，无法提交到百度 API")
+	}
+
 	// 1. 转 Base64
 	base64Data := base64.StdEncoding.EncodeToString(fileData)
 
@@ -150,20 +147,33 @@ func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, e
 	}
 
 	// 2. 提交任务
-	// URL: https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task
 	taskURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task?access_token=" + token
 
-	payload := url.Values{}
-	payload.Set("file_data", base64Data)
-	payload.Set("file_name", fileName)
+	// 只传文件名，不传完整路径
+	baseName := filepath.Base(fileName)
 
-	resp, err := c.httpClient.PostForm(taskURL, payload)
+	// 构造 URL 编码后的 Payload 字符串
+	payloadString := fmt.Sprintf("file_data=%s&file_url=&file_name=%s&analysis_chart=false",
+		url.QueryEscape(base64Data),
+		url.QueryEscape(baseName),
+	)
+	payload := strings.NewReader(payloadString)
+
+	req, err := http.NewRequest("POST", taskURL, payload)
 	if err != nil {
-		return "", fmt.Errorf("提交任务请求失败: %w", err)
+		return "", fmt.Errorf("创建提交任务请求失败: %w", err)
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("提交任务 HTTP 请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
+
 	var taskResp TaskResponse
 	if err := json.Unmarshal(body, &taskResp); err != nil {
 		return "", fmt.Errorf("解析任务响应失败: %w", err)
@@ -177,7 +187,7 @@ func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, e
 
 	// 3. 轮询结果
 	queryURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task/query?access_token=" + token
-	maxRetries := 30 // 最多等待 60 秒
+	maxRetries := 60 // 最多等待 120 秒
 	var markdownURL string
 
 	for range maxRetries {
@@ -199,10 +209,9 @@ func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, e
 			markdownURL = queryResp.Result.MarkdownURL
 			break
 		} else if queryResp.Result.Status == "failed" {
-			return "", fmt.Errorf("百度解析任务执行失败")
+			return "", fmt.Errorf("百度解析任务执行失败: %s", queryResp.Result.TaskError)
 		}
 
-		// 还在运行中，等待 2 秒
 		time.Sleep(2 * time.Second)
 	}
 

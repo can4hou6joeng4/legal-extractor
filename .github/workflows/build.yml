@@ -42,10 +42,19 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Build Wails App
+        env:
+          BAIDU_APP_ID: ${{ secrets.BAIDU_APP_ID }}
+          BAIDU_API_KEY: ${{ secrets.BAIDU_API_KEY }}
+          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
         run: |
-          # V2.0 纯 Go 架构构建：处理本地忽略的嵌入文件
+          # V2.0 纯 Go 架构构建：从 GitHub Secrets 生成嵌入配置
           mkdir -p internal/config
-          touch internal/config/baked_conf.yaml
+          cat > internal/config/baked_conf.yaml << EOF
+          baidu:
+            app_id: "${BAIDU_APP_ID}"
+            api_key: "${BAIDU_API_KEY}"
+            secret_key: "${BAIDU_SECRET_KEY}"
+          EOF
 
           cd frontend
           npm install
@@ -123,8 +132,20 @@ jobs:
 
       - name: Build Wails App
         shell: powershell
+        env:
+          BAIDU_APP_ID: ${{ secrets.BAIDU_APP_ID }}
+          BAIDU_API_KEY: ${{ secrets.BAIDU_API_KEY }}
+          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
         run: |
-          New-Item -ItemType File -Path "internal/config/baked_conf.yaml" -Force
+          # 从 GitHub Secrets 生成嵌入配置
+          New-Item -ItemType Directory -Path "internal/config" -Force | Out-Null
+          @"
+          baidu:
+            app_id: "$env:BAIDU_APP_ID"
+            api_key: "$env:BAIDU_API_KEY"
+            secret_key: "$env:BAIDU_SECRET_KEY"
+          "@ | Out-File -FilePath "internal/config/baked_conf.yaml" -Encoding UTF8
+
           cd frontend
           npm install
           npm run build
