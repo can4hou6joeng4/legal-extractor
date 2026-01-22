@@ -2,7 +2,7 @@
   <img src="build/appicon.png" alt="Legal Extractor Logo" width="120" height="120">
 </p>
 
-<h1 align="center">法律文书提取器 (Legal Document Extractor)</h1>
+<h1 align="center">法律文书提取器 (Legal Document Extractor) v2.1.4</h1>
 
 <p align="center">
   <strong>从法律文书中智能提取关键信息，一键导出为结构化数据</strong>
@@ -13,6 +13,7 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Version-2.1.4-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go Version">
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?style=flat-square&logo=vue.js" alt="Vue Version">
   <img src="https://img.shields.io/badge/Wails-2.x-DF0000?style=flat-square" alt="Wails Version">
