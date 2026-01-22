@@ -156,7 +156,7 @@ async function handleSelectFile() {
 .drop-zone.wails-drop-target-active {
   border-color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
-  transform: scale(1.01);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 
 .drop-zone.has-file {
