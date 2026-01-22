@@ -258,13 +258,17 @@ function handleFieldsChange(fields: string[]) {
     </Transition>
 
     <!-- Trial Banner -->
-    <div v-if="trialStatus && api.isDesktop" class="trial-banner" :class="{ 'expired': trialStatus.isExpired }">
+    <div v-if="trialStatus && api.isDesktop" class="trial-banner" :class="{ 'expired': trialStatus.isExpired }" role="status" aria-live="polite">
       <template v-if="!trialStatus.isExpired">
-        <span class="trial-icon">⏳</span>
+        <span class="trial-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
         <span class="trial-text">试用期剩余：<strong>{{ trialStatus.days }}</strong> 天 <strong>{{ trialStatus.hours }}</strong> 小时</span>
       </template>
       <template v-else>
-        <span class="trial-icon">❌</span>
+        <span class="trial-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+        </span>
         <span class="trial-text">试用期已结束，核心功能已锁定。请联系开发者获取正式版。</span>
       </template>
     </div>
@@ -385,6 +389,8 @@ function handleFieldsChange(fields: string[]) {
 
 .trial-icon {
   font-size: 1.1rem;
+  display: flex;
+  align-items: center;
 }
 
 .trial-text strong {
