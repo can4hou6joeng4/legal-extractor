@@ -128,11 +128,16 @@ async function handleSelectFile() {
       </div>
       <div class="text-content">
         <h3 v-if="!selectedFile">点击或拖拽上传文件</h3>
-        <h3 v-else>{{ fileName }}</h3>
+        <div v-else class="selected-file-info">
+          <h3 class="file-name-display">{{ fileName }}</h3>
+          <p class="file-path-text" :title="String(selectedFile)">{{ selectedFile }}</p>
+        </div>
         <p v-if="!selectedFile" class="hint">支持 .docx / .pdf 格式法律文书</p>
-        <p v-else class="hint file-path">{{ selectedFile }}</p>
       </div>
-      <div v-if="selectedFile" class="change-file-btn">更换</div>
+      <button v-if="selectedFile" class="change-file-btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+        <span>更换文件</span>
+      </button>
     </div>
   </div>
 </template>
@@ -191,34 +196,74 @@ async function handleSelectFile() {
 }
 
 .text-content h3 {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--text-primary);
+  font-family: var(--font-heading);
+  letter-spacing: 0.5px;
+}
+
+.selected-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.file-name-display {
+  color: var(--text-primary) !important;
+  max-width: 500px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-path-text {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  max-width: 450px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.7;
 }
 
 .hint {
   color: var(--text-muted);
   font-size: 0.9rem;
-}
-
-.file-path {
-  font-family: monospace;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 8px;
-  border-radius: 4px;
-  max-width: 100%;
-  word-break: break-all;
+  margin-top: 4px;
 }
 
 .change-file-btn {
-  margin-top: var(--spacing-sm);
-  font-size: 0.8rem;
-  color: var(--accent-primary);
-  text-decoration: underline;
-  opacity: 0.8;
+  margin-top: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .change-file-btn:hover {
-  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.change-file-btn:hover svg {
+  transform: rotate(180deg);
+}
+
+.change-file-btn svg {
+  transition: transform 0.5s ease;
 }
 </style>

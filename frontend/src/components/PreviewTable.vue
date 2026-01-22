@@ -29,6 +29,7 @@ const columns = computed(() => {
       label: props.fieldLabels[key] || key,
       isLongText: key === "request" || key === "factsReason",
       width: key === "defendant" ? "120px" : key === "idNumber" ? "200px" : "auto",
+      align: key === "defendant" || key === "idNumber" ? "center" : "left",
     }));
 });
 </script>
@@ -52,14 +53,18 @@ const columns = computed(() => {
       <table>
         <thead>
           <tr>
-            <th v-for="col in columns" :key="col.key" :style="{ width: col.width }">
+            <th
+              v-for="col in columns"
+              :key="col.key"
+              :style="{ width: col.width, textAlign: col.align as any }"
+            >
               {{ col.label }}
             </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="(record, index) in records" :key="index">
-            <td v-for="col in columns" :key="col.key">
+            <td v-for="col in columns" :key="col.key" :style="{ textAlign: col.align as any }">
               <div class="edit-cell">
                 <textarea
                   v-if="col.isLongText"
@@ -74,6 +79,7 @@ const columns = computed(() => {
                   v-model="records[index][col.key]"
                   type="text"
                   class="edit-input"
+                  :class="{ 'text-center': col.align === 'center' }"
                   spellcheck="false"
                   :aria-label="col.label + ' 输入框'"
                 />
@@ -163,7 +169,7 @@ table {
 th {
   background: rgba(15, 23, 42, 0.95);
   padding: 14px 16px;
-  text-align: left;
+  text-align: center !important; /* 强制表头居中对齐 */
   font-weight: 600;
   font-size: 0.9rem;
   font-family: var(--font-heading);
@@ -177,11 +183,13 @@ th {
 td {
   padding: 8px;
   border-bottom: 1px solid var(--surface-border);
-  vertical-align: top;
+  vertical-align: middle; /* 核心优化：垂直居中 */
 }
 
 .edit-cell {
   width: 100%;
+  display: flex; /* 配合垂直居中 */
+  align-items: center;
 }
 
 .edit-input {
@@ -205,6 +213,10 @@ td {
 
 .edit-input:hover:not(:focus) {
   background: rgba(255, 255, 255, 0.03);
+}
+
+.edit-input.text-center {
+  text-align: center;
 }
 
 textarea.edit-input {

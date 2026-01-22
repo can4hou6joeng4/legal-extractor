@@ -175,22 +175,18 @@ async function handleSelectOutput() {
       <div class="divider"></div>
 
       <div class="grid-row">
-        <!-- Export Format -->
+        <!-- Export Format (Locked to Excel) -->
         <div class="config-cell">
            <label class="cell-label">导出格式</label>
-           <div class="select-wrapper">
-             <select
-               :value="selectedFormat"
-               @input="emit('update:selectedFormat', ($event.target as HTMLSelectElement).value)"
-               class="custom-select"
-               aria-label="选择导出格式"
-             >
-               <option value="xlsx">Excel 表格 (.xlsx)</option>
-               <option value="csv">CSV 文件 (.csv)</option>
-               <option value="json">JSON 数据 (.json)</option>
-             </select>
-             <div class="select-arrow">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+           <div class="select-wrapper locked">
+             <div class="custom-select readonly">
+               <span class="format-icon">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>
+               </span>
+               <span>Excel 表格 (.xlsx)</span>
+             </div>
+             <div class="lock-icon" title="仅支持 Excel 导出">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
              </div>
            </div>
         </div>
@@ -444,6 +440,34 @@ async function handleSelectOutput() {
   transform: translateY(-50%);
   color: var(--text-muted);
   pointer-events: none;
+}
+
+.custom-select.readonly {
+  cursor: default;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.custom-select.readonly:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.format-icon {
+  color: var(--success);
+  display: flex;
+}
+
+.select-wrapper.locked .lock-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  opacity: 0.5;
 }
 
 /* Path Input */
