@@ -165,3 +165,74 @@ body {
     background: var(--accent-primary);
     color: white;
 }
+
+/* ============================
+   Reduced Motion Support
+   ============================ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ============================
+   Shared Animations
+   ============================ */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.blink {
+    animation: blink 1.5s ease-in-out infinite;
+}
+
+/* ============================
+   Loading Overlay
+   ============================ */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    gap: 20px;
+    pointer-events: all;
+}
+
+.loading-spinner {
+    color: var(--accent-primary);
+}
+
+.loading-content {
+    text-align: center;
+}
+
+.loading-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.loading-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
