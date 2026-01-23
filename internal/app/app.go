@@ -88,46 +88,18 @@ type FieldOption struct {
 	Label string `json:"label"`
 }
 
-// ScanFields analyzes the file and returns fields that exist in the content
+// ScanFields 返回系统支持的可提取字段列表 (优化：本地静态返回，避免 API 调用费)
 func (a *App) ScanFields(inputFile string) ([]FieldOption, error) {
-	if inputFile == "" {
-		return nil, fmt.Errorf("no file selected")
-	}
-
-	// 适配器层：负责读取本地文件
-	fileData, err := os.ReadFile(inputFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %v", err)
-	}
-
-	// 提取数据并检测字段（PDF 和 DOCX 都使用统一接口）
-	records, err := a.extractor.ExtractData(fileData, inputFile, []string{"defendant", "idNumber", "request", "factsReason"})
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract data: %v", err)
-	}
-
 	var options []FieldOption
+	// 定义提取器支持的核心字段
 	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
 
-	// 检查哪些字段在提取的记录中有值
-	fieldExists := make(map[string]bool)
-	for _, record := range records {
-		for k, v := range record {
-			if v != "" {
-				fieldExists[k] = true
-			}
-		}
-	}
-
-	// 按顺序返回存在的字段
 	for _, k := range orderedKeys {
-		if fieldExists[k] {
-			if p, ok := extractor.PatternRegistry[k]; ok {
-				options = append(options, FieldOption{
-					Key:   k,
-					Label: p.Label,
-				})
-			}
+		if p, ok := extractor.PatternRegistry[k]; ok {
+			options = append(options, FieldOption{
+				Key:   k,
+				Label: p.Label,
+			})
 		}
 	}
 
