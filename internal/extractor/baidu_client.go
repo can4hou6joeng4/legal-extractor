@@ -263,13 +263,17 @@ func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, e
 		return "", &BaiduAPIError{Code: 0, Hint: "任务提交失败，请稍后重试"}
 	}
 
-	// 3. 轮询结果
+	// 3. 轮询结果 (优化计费：阶梯式轮询)
 	token, _ := c.GetAccessToken()
 	queryURL := "https://aip.baidubce.com/rest/2.0/brain/online/v2/paddle-vl-parser/task/query?access_token=" + token
-	maxRetries := 60 // 最多等待 120 秒
+
+	// 首次查询前静默 5 秒 (官方建议)
+	time.Sleep(5 * time.Second)
+
+	maxRetries := 30 // 配合 10秒/次的频率，总等待时间仍保持在约 300 秒
 	var markdownURL string
 
-	for range maxRetries {
+	for i := 0; i < maxRetries; i++ {
 		queryPayload := url.Values{}
 		queryPayload.Set("task_id", taskID)
 
@@ -295,7 +299,8 @@ func (c *BaiduClient) ParseDocument(fileData []byte, fileName string) (string, e
 			return "", &BaiduAPIError{Code: 0, Hint: fmt.Sprintf("文档解析失败: %s，请确保文档内容清晰可读", taskErr)}
 		}
 
-		time.Sleep(2 * time.Second)
+		// 降低轮询频率至 10 秒/次，减少收费接口调用
+		time.Sleep(10 * time.Second)
 	}
 
 	if markdownURL == "" {
