@@ -134,17 +134,15 @@ jobs:
       - name: Build Wails App
         shell: powershell
         env:
-          BAIDU_APP_ID: ${{ secrets.BAIDU_APP_ID }}
-          BAIDU_API_KEY: ${{ secrets.BAIDU_API_KEY }}
-          BAIDU_SECRET_KEY: ${{ secrets.BAIDU_SECRET_KEY }}
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         run: |
           # 从 GitHub Secrets 生成嵌入配置
           New-Item -ItemType Directory -Path "internal/config" -Force | Out-Null
           @"
-          baidu:
-            app_id: "$env:BAIDU_APP_ID"
-            api_key: "$env:BAIDU_API_KEY"
-            secret_key: "$env:BAIDU_SECRET_KEY"
+          tencent:
+            secret_id: "$env:TENCENT_SECRET_ID"
+            secret_key: "$env:TENCENT_SECRET_KEY"
           "@ | Out-File -FilePath "internal/config/baked_conf.yaml" -Encoding UTF8
 
           cd frontend
