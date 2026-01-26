@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
-	"strconv"
-	"time"
 )
 
 var (
@@ -72,13 +72,12 @@ var bakedConfig []byte
 
 // Config 应用配置结构
 type Config struct {
-	Baidu BaiduConfig `mapstructure:"baidu"`
+	Tencent TencentConfig `mapstructure:"tencent"`
 }
 
-// BaiduConfig 百度 AI OCR 配置
-type BaiduConfig struct {
-	AppID     string `mapstructure:"app_id"`
-	APIKey    string `mapstructure:"api_key"`
+// TencentConfig 腾讯云 OCR 配置
+type TencentConfig struct {
+	SecretId  string `mapstructure:"secret_id"`
 	SecretKey string `mapstructure:"secret_key"`
 }
 
@@ -102,9 +101,8 @@ func Init(configPath string) error {
 	}
 
 	// 设置默认值
-	v.SetDefault("baidu.app_id", "")
-	v.SetDefault("baidu.api_key", "")
-	v.SetDefault("baidu.secret_key", "")
+	v.SetDefault("tencent.secret_id", "")
+	v.SetDefault("tencent.secret_key", "")
 
 	// 绑定环境变量 (前缀 LEGAL_EXTRACTOR_)
 	v.SetEnvPrefix("LEGAL_EXTRACTOR")
@@ -126,9 +124,6 @@ func Init(configPath string) error {
 	err = v.ReadInConfig()
 
 	// 判断是否需要加载内置配置 (Baked Config)
-	// 触发条件：
-	// 1. 本地配置文件不存在 (ConfigFileNotFoundError)
-	// 2. 或者本地文件存在，但 API Key 为空 (说明是初始模板)
 	useBaked := false
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -138,17 +133,14 @@ func Init(configPath string) error {
 		}
 	} else {
 		// 文件读取成功，检查是否为空配置
-		if v.GetString("baidu.api_key") == "" {
-			fmt.Println("[ℹ️ 提示] 本地配置未设置 API Key，尝试加载内置配置...")
+		if v.GetString("tencent.secret_id") == "" {
+			fmt.Println("[ℹ️ 提示] 本地配置未设置腾讯云密钥，尝试加载内置配置...")
 			useBaked = true
 		}
 	}
 
 	// 加载内置配置
 	if useBaked && len(bakedConfig) > 0 {
-		// 注意：如果之前ReadInConfig成功但内容为空，这里ReadConfig(baked)会覆盖它
-		// 如果是混合场景（本地有AppID但没Key），建议使用MergeConfig，但为简单起见，
-		// 这里假设BakedConfig是完整的备用方案。
 		v.SetConfigType("yaml")
 		if loadErr := v.MergeConfig(bytes.NewBuffer(bakedConfig)); loadErr != nil {
 			fmt.Printf("[⚠️ 警告] 加载内置配置失败: %v\n", loadErr)
@@ -157,15 +149,13 @@ func Init(configPath string) error {
 		}
 	}
 
-	// 如果最终 API Key 仍然为空，且之前是因为文件不存在才进来的，则创建默认模板
-	if v.GetString("baidu.api_key") == "" {
-		// 仅当本地文件确实不存在时才创建，避免覆盖用户已有的（虽然可能是空的）文件
+	// 如果最终密钥仍然为空，且之前是因为文件不存在才进来的，则创建默认模板
+	if v.GetString("tencent.secret_id") == "" {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			defaultPath := filepath.Join(baseDir, "config", "conf.yaml")
 			if createErr := ensureConfigFile(defaultPath); createErr != nil {
 				return fmt.Errorf("创建默认配置失败: %w", createErr)
 			}
-			// 再次尝试读取刚创建的文件（虽然它是空的，但为了保持状态一致）
 			v.SetConfigFile(defaultPath)
 			_ = v.ReadInConfig()
 		}
@@ -177,11 +167,11 @@ func Init(configPath string) error {
 		return fmt.Errorf("解析配置失败: %w", err)
 	}
 
-	// 2. 检查关键配置是否为空，给出明确指引
-	if cfg.Baidu.APIKey == "" || cfg.Baidu.SecretKey == "" {
+	// 检查关键配置是否为空，给出明确指引
+	if cfg.Tencent.SecretId == "" || cfg.Tencent.SecretKey == "" {
 		exePath, _ := os.Executable()
 		absConfigPath := filepath.Join(filepath.Dir(exePath), "config", "conf.yaml")
-		fmt.Printf("\n[⚠️ 配置提示] 未检测到有效的百度 API 密钥。\n")
+		fmt.Printf("\n[⚠️ 配置提示] 未检测到有效的腾讯云 API 密钥。\n")
 		fmt.Printf("请编辑配置文件: %s\n", absConfigPath)
 		fmt.Printf("申请教程详见文档: https://github.com/can4hou6joeng4/legal-extractor/blob/main/docs/user/CONFIG_GUIDE.md\n\n")
 	}
@@ -211,12 +201,11 @@ func ensureConfigFile(configPath string) error {
 	// 写入默认配置
 	defaultConfig := `# Legal Extractor 配置文件
 # 支持通过环境变量覆盖，前缀为 LEGAL_EXTRACTOR_
-# 例如: LEGAL_EXTRACTOR_BAIDU_API_KEY=xxx
+# 例如: LEGAL_EXTRACTOR_TENCENT_SECRET_ID=xxx
 
-baidu:
-  app_id: ""     # 百度 AI AppID
-  api_key: ""    # 百度 AI API Key
-  secret_key: "" # 百度 AI Secret Key
+tencent:
+  secret_id: ""  # 腾讯云 SecretId
+  secret_key: "" # 腾讯云 SecretKey
 `
 	return os.WriteFile(configPath, []byte(defaultConfig), 0644)
 }
@@ -229,12 +218,12 @@ func Get() *Config {
 	return cfg
 }
 
-// GetBaidu 获取百度配置
-func GetBaidu() BaiduConfig {
+// GetTencent 获取腾讯云配置
+func GetTencent() TencentConfig {
 	if cfg == nil {
-		return BaiduConfig{}
+		return TencentConfig{}
 	}
-	return cfg.Baidu
+	return cfg.Tencent
 }
 
 // LoadConfig 兼容旧 API，内部调用 Init

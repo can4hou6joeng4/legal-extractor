@@ -15,10 +15,10 @@ import (
 
 // Extractor 处理器，负责协调不同格式的提取策略
 type Extractor struct {
-	logger      *slog.Logger
-	baiduClient *BaiduClient
-	cache       map[string][]Record
-	cacheMu     sync.RWMutex
+	logger        *slog.Logger
+	tencentClient *TencentClient
+	cache         map[string][]Record
+	cacheMu       sync.RWMutex
 }
 
 // NewExtractor 创建一个新的提取器实例
@@ -27,9 +27,9 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 		logger = slog.Default()
 	}
 	return &Extractor{
-		logger:      logger,
-		baiduClient: NewBaiduClient(),
-		cache:       make(map[string][]Record),
+		logger:        logger,
+		tencentClient: NewTencentClient(),
+		cache:         make(map[string][]Record),
 	}
 }
 
@@ -58,8 +58,8 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 
 	switch ext {
 	case ".pdf", ".jpg", ".png", ".jpeg":
-		e.logger.Info("使用云端百度 AI 提取数据", "file", fileName)
-		records, err = e.extractViaCloud(fileData, fileName)
+		e.logger.Info("使用腾讯云 OCR 提取数据", "file", fileName)
+		records, err = e.extractViaCloud(fileData)
 	case ".docx":
 		e.logger.Info("使用本地原生逻辑提取 DOCX", "file", fileName)
 		records, err = e.extractFromDocx(fileData, fields)
@@ -79,22 +79,19 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 	return records, nil
 }
 
-// extractViaCloud 调用百度云 API 进行提取
-func (e *Extractor) extractViaCloud(fileData []byte, fileName string) ([]Record, error) {
-	// 1. 调用百度 API 获取结构化 Markdown
-	markdown, err := e.baiduClient.ParseDocument(fileData, fileName)
+// extractViaCloud 调用腾讯云 OCR API 进行提取
+func (e *Extractor) extractViaCloud(fileData []byte) ([]Record, error) {
+	record, err := e.tencentClient.ParseDocument(fileData)
 	if err != nil {
-		e.logger.Error("云端提取失败", "error", err)
+		e.logger.Error("腾讯云 OCR 提取失败", "error", err)
 		return nil, err
 	}
 
-	// 2. 使用 Markdown 解析器转换为 Record
-	records := ParseMarkdown(markdown)
-	if records == nil {
+	if len(record) == 0 {
 		return nil, fmt.Errorf("未能从文档中提取到有效字段")
 	}
 
-	return records, nil
+	return []Record{record}, nil
 }
 
 // extractFromDocx 保留原有的本地 DOCX 提取逻辑
@@ -233,7 +230,7 @@ func (e *Extractor) parseCases(text string, fields []string) []Record {
 }
 
 // smartMerge 智能合并换行符
-// 逻辑：保留句号、分号、冒号后的换行，或者新条目序号（如“二、”）之前的换行，其他的换行符视作布局造成的干扰并予以合并。
+// 逻辑：保留句号、分号、冒号后的换行，或者新条目序号（如"二、"）之前的换行，其他的换行符视作布局造成的干扰并予以合并。
 func smartMerge(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -245,7 +242,7 @@ func smartMerge(s string) string {
 	reMultipleNL := regexp.MustCompile(`\n+`)
 	s = reMultipleNL.ReplaceAllString(s, "\n")
 
-	// 2. 标记需要保留的“逻辑断点”
+	// 2. 标记需要保留的"逻辑断点"
 	// A. 句末标点后：。；？！
 	rePreserveAfter := regexp.MustCompile(`([。；？！])\n`)
 	s = rePreserveAfter.ReplaceAllString(s, "$1[LOGICAL_NL]")
