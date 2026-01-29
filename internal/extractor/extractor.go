@@ -11,10 +11,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/dslipak/pdf"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -62,6 +60,7 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 	var records []Record
 	var err error
 
+	switch ext {
 	case ".pdf":
 		records, err = e.extractPdf(fileData, fields, onProgress)
 	case ".jpg", ".png", ".jpeg":
