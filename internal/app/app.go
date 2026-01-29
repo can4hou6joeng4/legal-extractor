@@ -169,7 +169,12 @@ func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) Extra
 	}
 
 	// 1. Extract Data
-	records, err := a.extractor.ExtractData(fileData, inputPath, fields)
+	records, err := a.extractor.ExtractData(fileData, inputPath, fields, func(current, total int) {
+		wr.EventsEmit(a.ctx, "extraction_progress", map[string]int{
+			"current": current,
+			"total":   total,
+		})
+	})
 	if err != nil {
 		// 转换特定错误码
 		errMsg := err.Error()
@@ -261,7 +266,12 @@ func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
 		}
 	}
 
-	records, err := a.extractor.ExtractData(fileData, inputPath, fields)
+	records, err := a.extractor.ExtractData(fileData, inputPath, fields, func(current, total int) {
+		wr.EventsEmit(a.ctx, "extraction_progress", map[string]int{
+			"current": current,
+			"total":   total,
+		})
+	})
 	if err != nil {
 		return ExtractResult{
 			Success:      false,

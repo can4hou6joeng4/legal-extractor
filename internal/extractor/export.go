@@ -100,7 +100,7 @@ func ExportExcel(path string, records []Record) error {
 	// 1. Determine Headers
 	var keys []string
 	var headers []string
-	orderedKeys := []string{"defendant", "idNumber", "request", "factsReason"}
+	orderedKeys := []string{"page", "defendant", "idNumber", "request", "factsReason"}
 	for _, k := range orderedKeys {
 		if _, ok := records[0][k]; ok {
 			keys = append(keys, k)

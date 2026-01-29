@@ -7,10 +7,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/dslipak/pdf"
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 // Extractor 处理器，负责协调不同格式的提取策略
@@ -36,18 +43,17 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 // Record 代表一条提取的记录
 type Record map[string]string
 
+// ProgressCallback 进度回调函数
+type ProgressCallback func(current, total int)
+
 // ExtractData 根据文件类型选择提取策略
-// 参数说明：
-//   - fileData: 文件的二进制内容（支持内存数据，便于 Web 版集成）
-//   - fileName: 文件名（用于判断文件类型和缓存键）
-//   - fields: 需要提取的字段列表
-func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []string) ([]Record, error) {
+func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []string, onProgress ProgressCallback) ([]Record, error) {
 	ext := strings.ToLower(filepath.Ext(fileName))
 
-	// 1. 检查缓存（使用 fileName 作为缓存键）
+	// 1. 检查缓存
 	e.cacheMu.RLock()
 	if cached, ok := e.cache[fileName]; ok {
-		e.logger.Info("命中缓存结果，跳过 API 调用", "file", fileName)
+		e.logger.Info("命中缓存结果，跳过提取", "file", fileName)
 		e.cacheMu.RUnlock()
 		return cached, nil
 	}
@@ -56,10 +62,10 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 	var records []Record
 	var err error
 
-	switch ext {
-	case ".pdf", ".jpg", ".png", ".jpeg":
-		e.logger.Info("使用腾讯云 OCR 提取数据", "file", fileName)
-		records, err = e.extractViaCloud(fileData)
+	case ".pdf":
+		records, err = e.extractPdf(fileData, fields, onProgress)
+	case ".jpg", ".png", ".jpeg":
+		return nil, fmt.Errorf("图片识别功能已暂时禁用（仅支持PDF）")
 	case ".docx":
 		e.logger.Info("使用本地原生逻辑提取 DOCX", "file", fileName)
 		records, err = e.extractFromDocx(fileData, fields)
@@ -79,19 +85,135 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 	return records, nil
 }
 
-// extractViaCloud 调用腾讯云 OCR API 进行提取
-func (e *Extractor) extractViaCloud(fileData []byte) ([]Record, error) {
-	record, err := e.tencentClient.ParseDocument(fileData)
+// extractPdf 处理 PDF 提取（优先本地提取文本层）
+func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress ProgressCallback) ([]Record, error) {
+	// 1. 获取总页数
+	totalPages := 1
+	pageCount, err := api.PageCount(bytes.NewReader(fileData), nil)
+	if err == nil {
+		totalPages = pageCount
+	}
+
+	// 2. 探测第一页文本层
+	firstPageText, _ := e.extractPageTextLocally(fileData, 1)
+	if len(strings.TrimSpace(firstPageText)) > 20 {
+		e.logger.Info("检测到 PDF 文本层，切换至 [本地高速解析] 模式", "totalPages", totalPages)
+		return e.batchExtractLocalPdf(fileData, fields, totalPages, onProgress)
+	}
+
+	e.logger.Info("未检测到 PDF 文本层或文本过少，切换至 [本地系统 OCR] 模式", "totalPages", totalPages)
+	return e.extractViaWinOcr(fileData, totalPages, onProgress)
+}
+
+// extractPageTextLocally 本地提取指定页码的文本
+func (e *Extractor) extractPageTextLocally(fileData []byte, pageNum int) (string, error) {
+	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
 	if err != nil {
-		e.logger.Error("腾讯云 OCR 提取失败", "error", err)
+		return "", err
+	}
+
+	if pageNum > r.NumPage() {
+		return "", fmt.Errorf("页码超出范围")
+	}
+
+	p := r.Page(pageNum)
+	if p.V.IsNull() {
+		return "", fmt.Errorf("页面内容为空")
+	}
+
+	text, _ := p.GetPlainText(nil)
+	return text, nil
+}
+
+// batchExtractLocalPdf 批量本地提取 PDF 文本层
+func (e *Extractor) batchExtractLocalPdf(fileData []byte, fields []string, totalPages int, onProgress ProgressCallback) ([]Record, error) {
+	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
+	if err != nil {
 		return nil, err
 	}
 
-	if len(record) == 0 {
-		return nil, fmt.Errorf("未能从文档中提取到有效字段")
+	var allRecords []Record
+	for i := 1; i <= totalPages; i++ {
+		if onProgress != nil {
+			onProgress(i, totalPages)
+		}
+
+		text, _ := r.Page(i).GetPlainText(nil)
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+
+		// 复用 parseCases 逻辑
+		pageRecords := e.parseCases(text, fields)
+		if len(pageRecords) > 0 {
+			for _, rec := range pageRecords {
+				rec["page"] = fmt.Sprintf("%d", i)
+				allRecords = append(allRecords, rec)
+			}
+		}
 	}
 
-	return []Record{record}, nil
+	return allRecords, nil
+}
+
+// extractViaWinOcr 调用 Windows 系统原生 OCR 桥接工具
+func (e *Extractor) extractViaWinOcr(fileData []byte, totalPages int, onProgress ProgressCallback) ([]Record, error) {
+	// 1. 创建临时文件存储 PDF 内容
+	tempFile, err := os.CreateTemp("", "legal_ocr_*.pdf")
+	if err != nil {
+		return nil, fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	if _, err := tempFile.Write(fileData); err != nil {
+		return nil, fmt.Errorf("写入临时文件失败: %w", err)
+	}
+
+	// 2. 定位桥接工具路径
+	exePath, _ := os.Executable()
+	baseDir := filepath.Dir(exePath)
+	bridgePath := filepath.Join(baseDir, "bridge_bin", "WinOcrBridge.exe")
+
+	// 开发环境适配
+	if _, err := os.Stat(bridgePath); os.IsNotExist(err) {
+		// 尝试查找源码同级目录 (wails dev 模式)
+		bridgePath = filepath.Join("internal", "extractor", "bridge_bin", "WinOcrBridge.exe")
+		if _, err := os.Stat(bridgePath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("找不到 Windows OCR 桥接工具 (WinOcrBridge.exe)，请确保它位于 bridge_bin 目录下")
+		}
+	}
+
+	var allRecords []Record
+	for i := 1; i <= totalPages; i++ {
+		if onProgress != nil {
+			onProgress(i, totalPages)
+		}
+
+		// 3. 调用命令行工具
+		cmd := exec.Command(bridgePath, tempFile.Name(), fmt.Sprintf("%d", i))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			e.logger.Warn("本地 OCR 识别页面失败", "page", i, "error", err, "output", string(output))
+			continue
+		}
+
+		text := strings.TrimSpace(string(output))
+		if text == "" {
+			continue
+		}
+
+		// 4. 解析识别出的文字
+		pageRecords := e.parseCases(text, nil) // 使用所有已注册字段
+		if len(pageRecords) > 0 {
+			for _, rec := range pageRecords {
+				rec["page"] = fmt.Sprintf("%d", i)
+				allRecords = append(allRecords, rec)
+			}
+		}
+	}
+
+	return allRecords, nil
 }
 
 // extractFromDocx 保留原有的本地 DOCX 提取逻辑

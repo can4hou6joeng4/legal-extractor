@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from "vue";
 import { api, downloadBlob, type Record, type ExtractResult } from "./services";
+import { EventsOn } from "../wailsjs/runtime/runtime";
 import MainDropZone from "./components/MainDropZone.vue";
 import ConfigPanel from "./components/ConfigPanel.vue";
 import ResultCard from "./components/ResultCard.vue";
@@ -120,6 +121,11 @@ function copyMachineID() {
 
 onMounted(() => {
   fetchTrialStatus();
+
+  // 监听提取进度
+  EventsOn("extraction_progress", (data: { current: number; total: number }) => {
+    loadingText.value = `正在识别第 ${data.current} / ${data.total} 页...`;
+  });
 });
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;

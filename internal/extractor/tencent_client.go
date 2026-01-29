@@ -136,8 +136,8 @@ func NewTencentClient() *TencentClient {
 	}
 }
 
-// ParseDocument 调用腾讯云结构化 OCR 解析文档
-func (c *TencentClient) ParseDocument(fileData []byte) (Record, error) {
+// ParseDocument 调用腾讯云结构化 OCR 解析文档指定页码
+func (c *TencentClient) ParseDocument(fileData []byte, pageNumber int) (Record, error) {
 	if len(fileData) == 0 {
 		return nil, &TencentAPIError{Code: "InvalidParameter", Hint: "文件内容为空，请检查文件是否损坏"}
 	}
@@ -152,7 +152,7 @@ func (c *TencentClient) ParseDocument(fileData []byte) (Record, error) {
 		"ImageBase64":         pdfBase64,
 		"ItemNames":           LegalDocItemNames,
 		"IsPdf":               true,
-		"PdfPageNumber":       1,
+		"PdfPageNumber":       pageNumber,
 		"EnableSealRecognize": true,
 	}
 

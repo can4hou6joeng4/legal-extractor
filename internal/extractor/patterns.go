@@ -33,4 +33,5 @@ var PatternRegistry = map[string]struct {
 	"idNumber":    {Label: "身份证号码", Pattern: DefaultPatterns.ID},
 	"request":     {Label: "诉讼请求", Pattern: DefaultPatterns.Request},
 	"factsReason": {Label: "事实与理由", Pattern: DefaultPatterns.Facts},
+	"page":        {Label: "页码", Pattern: nil},
 }
