@@ -40,6 +40,11 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 	}
 }
 
+// Logger 返回提取器的日志记录器
+func (e *Extractor) Logger() *slog.Logger {
+	return e.logger
+}
+
 // Record 代表一条提取的记录
 type Record map[string]string
 
@@ -48,6 +53,7 @@ type ProgressCallback func(current, total int)
 
 // ExtractData 根据文件类型选择提取策略
 func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []string, onProgress ProgressCallback) ([]Record, error) {
+	e.logger.Info("开始提取数据", "file", fileName, "size", len(fileData), "fields", fields)
 	ext := strings.ToLower(filepath.Ext(fileName))
 
 	// 1. 检查缓存
@@ -88,23 +94,44 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 
 // extractPdf 处理 PDF 提取（优先本地提取文本层）
 func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress ProgressCallback) ([]Record, error) {
+	e.logger.Info("正在解析 PDF 结构...", "bytes", len(fileData))
 	// 1. 获取总页数 (增加多库回退逻辑以提高鲁棒性)
 	totalPages := 1
+	e.logger.Debug("尝试使用 dslipak/pdf 获取页数")
 	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
 	if err == nil {
 		totalPages = r.NumPage()
+		e.logger.Info("dslipak/pdf 解析成功", "totalPages", totalPages)
 	} else {
+		e.logger.Warn("dslipak/pdf 解析失败，尝试回退到 pdfcpu", "error", err)
 		// 回退到 pdfcpu
 		pageCount, err := api.PageCount(bytes.NewReader(fileData), nil)
 		if err == nil {
 			totalPages = pageCount
+			e.logger.Info("pdfcpu 解析成功", "totalPages", totalPages)
+		} else {
+			e.logger.Error("所有 PDF 库解析页数均失败", "error", err)
 		}
 	}
 
-	e.logger.Info("开始处理 PDF 文件", "totalPages", totalPages)
+	// 2. 探测第一页文本层 (带超时保护，防止复杂 PDF 导致挂起)
+	e.logger.Info("正在尝试提取第一页文本层以判断解析模式...")
 
-	// 2. 探测第一页文本层
-	firstPageText, _ := e.extractPageTextLocally(fileData, 1)
+	// 使用 chan + goroutine 实现简单的探测超时
+	textChan := make(chan string, 1)
+	go func() {
+		t, _ := e.extractPageTextLocally(fileData, 1)
+		textChan <- t
+	}()
+
+	var firstPageText string
+	select {
+	case firstPageText = <-textChan:
+		e.logger.Debug("文本层探测完成")
+	case <-time.After(2 * time.Second):
+		e.logger.Warn("文本层探测超时，自动切换至 OCR 模式")
+	}
+
 	if len(strings.TrimSpace(firstPageText)) > 20 {
 		e.logger.Info("检测到 PDF 文本层，切换至 [本地高速解析] 模式")
 		return e.batchExtractLocalPdf(fileData, fields, totalPages, onProgress)
