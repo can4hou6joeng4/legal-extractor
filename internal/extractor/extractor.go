@@ -3,6 +3,8 @@ package extractor
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -11,6 +13,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -57,10 +61,11 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 	e.logger.Info("开始提取数据", "file", fileName, "size", len(fileData), "fields", fields)
 	ext := strings.ToLower(filepath.Ext(fileName))
 
-	// 1. 检查缓存
+	// 1. 检查缓存 (使用文件内容的 SHA256 哈希作为 Key)
+	fileHash := e.calculateHash(fileData)
 	e.cacheMu.RLock()
-	if cached, ok := e.cache[fileName]; ok {
-		e.logger.Info("命中缓存结果，跳过提取", "file", fileName)
+	if cached, ok := e.cache[fileHash]; ok {
+		e.logger.Info("命中内容哈希缓存，跳过提取", "file", fileName, "hash", fileHash[:8])
 		e.cacheMu.RUnlock()
 		return cached, nil
 	}
@@ -85,25 +90,25 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 		return nil, err
 	}
 
-	// 2. 写入缓存 (仅当结果非空时，防止缓存错误/无效状态)
+	// 2. 写入缓存 (仅当结果非空时)
 	if len(records) > 0 {
 		e.cacheMu.Lock()
-		e.cache[fileName] = records
+		e.cache[fileHash] = records
 		e.cacheMu.Unlock()
 	}
 
 	return records, nil
 }
 
+// calculateHash 计算文件内容的 SHA256 哈希值
+func (e *Extractor) calculateHash(data []byte) string {
+	hash := sha256.Sum256(data)
+	return fmt.Sprintf("%x", hash)
+}
+
 // extractPdf 处理 PDF 提取（优先本地提取文本层）
 func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress ProgressCallback) ([]Record, error) {
 	e.logger.Info("正在解析 PDF 结构...", "bytes", len(fileData))
-
-	// 0. 如果配置了百度 Token，优先直接使用百度 OCR（跳过本地探测以提升速度）
-	if e.baiduClient.config.Token != "" {
-		e.logger.Info("检测到百度 Token，优先使用 [百度 PaddleOCR-VL] 引擎")
-		return e.baiduClient.ParseDocument(fileData, true, onProgress)
-	}
 
 	// 1. 获取总页数 (增加多库回退逻辑以提高鲁棒性)
 	totalPages := 1
@@ -127,7 +132,9 @@ func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress Prog
 	// 2. 探测第一页文本层 (带超时保护，防止复杂 PDF 导致挂起)
 	e.logger.Info("正在尝试提取第一页文本层以判断解析模式...")
 
-	// 使用 chan + goroutine 实现简单的探测超时
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	textChan := make(chan string, 1)
 	go func() {
 		t, _ := e.extractPageTextLocally(fileData, 1)
@@ -138,7 +145,7 @@ func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress Prog
 	select {
 	case firstPageText = <-textChan:
 		e.logger.Debug("文本层探测完成")
-	case <-time.After(2 * time.Second):
+	case <-ctx.Done():
 		e.logger.Warn("文本层探测超时，自动切换至 OCR 模式")
 	}
 
@@ -147,15 +154,15 @@ func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress Prog
 		return e.batchExtractLocalPdf(fileData, fields, totalPages, onProgress)
 	}
 
-	e.logger.Info("未检测到 PDF 文本层或文本过少，切换至 [OCR 识别] 模式")
+	e.logger.Info("未检测到 PDF 文本层或文本过少，切换至 [云端识别] 模式")
 
-	// 如果配置了百度 Token，则优先使用百度 PaddleOCR-VL (Layout Parsing)
+	// 3. 如果配置了百度 Token，则优先使用百度 PaddleOCR-VL (Layout Parsing)
 	if e.baiduClient.config.Token != "" {
-		e.logger.Info("使用 [百度 PaddleOCR-VL] 引擎进行解析")
+		e.logger.Info("使用 [百度云端引擎] 进行解析")
 		return e.baiduClient.ParseDocument(fileData, true, onProgress)
 	}
 
-	e.logger.Info("未配置百度 Token，回退至 [本地系统 OCR] 模式")
+	e.logger.Info("未配置百度 Token，回退至 [本地系统识别] 模式")
 	return e.extractViaWinOcr(fileData, totalPages, onProgress)
 }
 
@@ -175,36 +182,99 @@ func (e *Extractor) extractPageTextLocally(fileData []byte, pageNum int) (string
 	return text, nil
 }
 
-// batchExtractLocalPdf 批量本地提取 PDF 文本层
+// batchExtractLocalPdf 批量本地提取 PDF 文本层 (并发加速版)
 func (e *Extractor) batchExtractLocalPdf(fileData []byte, fields []string, totalPages int, onProgress ProgressCallback) ([]Record, error) {
-	var allRecords []Record
-	for i := 1; i <= totalPages; i++ {
-		if onProgress != nil {
-			onProgress(i, totalPages)
-		}
+	e.logger.Info("启动并行提取引擎", "workers", runtime.NumCPU())
 
-		text, err := e.extractPageTextLocally(fileData, i)
-		if err != nil || strings.TrimSpace(text) == "" {
-			continue
-		}
+	// 1. 预解析一次 Reader，供所有子任务复用 (dslipak/pdf 是并发安全的)
+	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
+	if err != nil {
+		return nil, fmt.Errorf("创建 PDF 阅读器失败: %w", err)
+	}
 
-		// 针对 PDF 每页一份文书的场景，优化解析逻辑
-		pageRecords := e.parseCases(text, fields)
-		if len(pageRecords) > 0 {
-			for _, rec := range pageRecords {
-				rec["page"] = fmt.Sprintf("%d", i)
-				allRecords = append(allRecords, rec)
+	type pageResult struct {
+		pageNum int
+		records []Record
+		err     error
+	}
+
+	// 2. 准备并行任务
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 8 {
+		numWorkers = 8 // 限制最大并发，防止内存波动过大
+	}
+	if numWorkers > totalPages {
+		numWorkers = totalPages
+	}
+
+	jobs := make(chan int, totalPages)
+	results := make(chan pageResult, totalPages)
+
+	// 3. 启动 Worker Pool
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for pageNum := range jobs {
+				// 提取并解析
+				p := r.Page(pageNum)
+				text, _ := p.GetPlainText(nil)
+
+				if strings.TrimSpace(text) == "" {
+					results <- pageResult{pageNum: pageNum}
+					continue
+				}
+
+				pageRecords := e.parseCases(text, fields)
+				for _, rec := range pageRecords {
+					rec["page"] = fmt.Sprintf("%d", pageNum)
+				}
+				results <- pageResult{pageNum: pageNum, records: pageRecords}
 			}
-		} else {
-			// 如果没匹配到 split，尝试直接匹配字段（作为保底）
-			e.logger.Debug("页面未匹配到分割符，尝试直接解析", "page", i)
+		}()
+	}
+
+	// 4. 发送任务
+	go func() {
+		for i := 1; i <= totalPages; i++ {
+			jobs <- i
+		}
+		close(jobs)
+	}()
+
+	// 5. 进度收集与结果汇总
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var allPageResults []pageResult
+	processedCount := 0
+	for res := range results {
+		processedCount++
+		if onProgress != nil {
+			onProgress(processedCount, totalPages)
+		}
+		if len(res.records) > 0 {
+			allPageResults = append(allPageResults, res)
 		}
 	}
 
-	return allRecords, nil
+	// 6. 按照页码排序，保证输出顺序一致
+	sort.Slice(allPageResults, func(i, j int) bool {
+		return allPageResults[i].pageNum < allPageResults[j].pageNum
+	})
+
+	var finalRecords []Record
+	for _, pr := range allPageResults {
+		finalRecords = append(finalRecords, pr.records...)
+	}
+
+	return finalRecords, nil
 }
 
-// extractViaWinOcr 调用 Windows 系统原生 OCR 桥接工具
+// extractViaWinOcr 调用 Windows 系统原生 OCR 桥接工具 (并发加速版)
 func (e *Extractor) extractViaWinOcr(fileData []byte, totalPages int, onProgress ProgressCallback) ([]Record, error) {
 	// 1. 创建临时文件存储 PDF 内容
 	tempFile, err := os.CreateTemp("", "legal_ocr_*.pdf")
@@ -223,45 +293,89 @@ func (e *Extractor) extractViaWinOcr(fileData []byte, totalPages int, onProgress
 	baseDir := filepath.Dir(exePath)
 	bridgePath := filepath.Join(baseDir, "bridge_bin", "WinOcrBridge.exe")
 
-	// 开发环境适配
 	if _, err := os.Stat(bridgePath); os.IsNotExist(err) {
-		// 尝试查找源码同级目录 (wails dev 模式)
 		bridgePath = filepath.Join("internal", "extractor", "bridge_bin", "WinOcrBridge.exe")
 		if _, err := os.Stat(bridgePath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("找不到 Windows OCR 桥接工具 (WinOcrBridge.exe)，请确保它位于 bridge_bin 目录下")
+			return nil, fmt.Errorf("找不到 Windows OCR 桥接工具 (WinOcrBridge.exe)")
 		}
 	}
 
-	var allRecords []Record
-	for i := 1; i <= totalPages; i++ {
-		if onProgress != nil {
-			onProgress(i, totalPages)
-		}
+	type pageResult struct {
+		pageNum int
+		records []Record
+	}
 
-		// 3. 调用命令行工具
-		cmd := exec.Command(bridgePath, tempFile.Name(), fmt.Sprintf("%d", i))
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			e.logger.Warn("本地 OCR 识别页面失败", "page", i, "error", err, "output", string(output))
-			continue
-		}
+	// 3. 并行执行 OCR 进程
+	numWorkers := 4 // OCR 进程较重，限制并发数
+	if numWorkers > totalPages {
+		numWorkers = totalPages
+	}
 
-		text := strings.TrimSpace(string(output))
-		if text == "" {
-			continue
-		}
+	jobs := make(chan int, totalPages)
+	results := make(chan pageResult, totalPages)
+	var wg sync.WaitGroup
 
-		// 4. 解析识别出的文字
-		pageRecords := e.parseCases(text, nil) // 使用所有已注册字段
-		if len(pageRecords) > 0 {
-			for _, rec := range pageRecords {
-				rec["page"] = fmt.Sprintf("%d", i)
-				allRecords = append(allRecords, rec)
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for pageNum := range jobs {
+				cmd := exec.Command(bridgePath, tempFile.Name(), fmt.Sprintf("%d", pageNum))
+				output, err := cmd.CombinedOutput()
+				if err != nil {
+					results <- pageResult{pageNum: pageNum}
+					continue
+				}
+
+				text := strings.TrimSpace(string(output))
+				if text == "" {
+					results <- pageResult{pageNum: pageNum}
+					continue
+				}
+
+				pageRecords := e.parseCases(text, nil)
+				for _, rec := range pageRecords {
+					rec["page"] = fmt.Sprintf("%d", pageNum)
+				}
+				results <- pageResult{pageNum: pageNum, records: pageRecords}
 			}
+		}()
+	}
+
+	go func() {
+		for i := 1; i <= totalPages; i++ {
+			jobs <- i
+		}
+		close(jobs)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var allPageResults []pageResult
+	processed := 0
+	for res := range results {
+		processed++
+		if onProgress != nil {
+			onProgress(processed, totalPages)
+		}
+		if len(res.records) > 0 {
+			allPageResults = append(allPageResults, res)
 		}
 	}
 
-	return allRecords, nil
+	sort.Slice(allPageResults, func(i, j int) bool {
+		return allPageResults[i].pageNum < allPageResults[j].pageNum
+	})
+
+	var finalRecords []Record
+	for _, pr := range allPageResults {
+		finalRecords = append(finalRecords, pr.records...)
+	}
+
+	return finalRecords, nil
 }
 
 // extractFromDocx 保留原有的本地 DOCX 提取逻辑
@@ -320,8 +434,11 @@ func extractTextFromDocx(fileData []byte) (string, error) {
 				}
 			}
 		case xml.EndElement:
-			if se.Name.Local == "p" {
+			switch se.Name.Local {
+			case "p", "tr":
 				sb.WriteString("\n")
+			case "tc":
+				sb.WriteString(" ")
 			}
 		}
 	}

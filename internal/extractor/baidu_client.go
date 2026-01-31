@@ -8,7 +8,6 @@ import (
 	"legal-extractor/internal/config"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/dslipak/pdf"
