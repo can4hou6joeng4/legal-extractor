@@ -73,12 +73,19 @@ var bakedConfig []byte
 // Config 应用配置结构
 type Config struct {
 	Tencent TencentConfig `mapstructure:"tencent"`
+	Baidu   BaiduConfig   `mapstructure:"baidu"`
 }
 
 // TencentConfig 腾讯云 OCR 配置
 type TencentConfig struct {
 	SecretId  string `mapstructure:"secret_id"`
 	SecretKey string `mapstructure:"secret_key"`
+}
+
+// BaiduConfig 百度 AI Studio OCR 配置
+type BaiduConfig struct {
+	Token  string `mapstructure:"token"`
+	ApiUrl string `mapstructure:"api_url"`
 }
 
 var (
@@ -103,6 +110,8 @@ func Init(configPath string) error {
 	// 设置默认值
 	v.SetDefault("tencent.secret_id", "")
 	v.SetDefault("tencent.secret_key", "")
+	v.SetDefault("baidu.token", "")
+	v.SetDefault("baidu.api_url", "https://n1544et5uec1tbh9.aistudio-app.com/layout-parsing")
 
 	// 绑定环境变量 (前缀 LEGAL_EXTRACTOR_)
 	v.SetEnvPrefix("LEGAL_EXTRACTOR")
@@ -206,6 +215,10 @@ func ensureConfigFile(configPath string) error {
 tencent:
   secret_id: ""  # 腾讯云 SecretId
   secret_key: "" # 腾讯云 SecretKey
+
+baidu:
+  token: ""      # 百度 AI Studio Token
+  api_url: "https://n1544et5uec1tbh9.aistudio-app.com/layout-parsing"
 `
 	return os.WriteFile(configPath, []byte(defaultConfig), 0644)
 }
@@ -224,6 +237,14 @@ func GetTencent() TencentConfig {
 		return TencentConfig{}
 	}
 	return cfg.Tencent
+}
+
+// GetBaidu 获取百度配置
+func GetBaidu() BaiduConfig {
+	if cfg == nil {
+		return BaiduConfig{}
+	}
+	return cfg.Baidu
 }
 
 // LoadConfig 兼容旧 API，内部调用 Init
