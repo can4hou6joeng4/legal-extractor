@@ -36,7 +36,7 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 	return &Extractor{
 		logger:        logger,
 		tencentClient: NewTencentClient(),
-		baiduClient:   NewBaiduClient(),
+		baiduClient:   NewBaiduClient(logger),
 		cache:         make(map[string][]Record),
 	}
 }
