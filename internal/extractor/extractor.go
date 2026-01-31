@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dslipak/pdf"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
