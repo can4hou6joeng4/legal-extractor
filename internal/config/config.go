@@ -125,8 +125,10 @@ func Init(configPath string) error {
 		// 默认查找路径
 		v.SetConfigName("conf")
 		v.SetConfigType("yaml")
-		v.AddConfigPath(filepath.Join(baseDir, "config")) // 锁定可执行文件同级的 config 目录
-		v.AddConfigPath(baseDir)
+		v.AddConfigPath(filepath.Join(baseDir, "config")) // 1. 锁定可执行文件同级的 config 目录
+		v.AddConfigPath(baseDir)                           // 2. 锁定可执行文件同级
+		v.AddConfigPath("./config")                       // 3. 兼容开发模式：当前工作目录下的 config
+		v.AddConfigPath(".")                              // 4. 兼容开发模式：当前工作目录
 	}
 
 	// 尝试读取配置文件
