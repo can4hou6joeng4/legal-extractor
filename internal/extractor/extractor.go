@@ -85,10 +85,12 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 		return nil, err
 	}
 
-	// 2. 写入缓存
-	e.cacheMu.Lock()
-	e.cache[fileName] = records
-	e.cacheMu.Unlock()
+	// 2. 写入缓存 (仅当结果非空时，防止缓存错误/无效状态)
+	if len(records) > 0 {
+		e.cacheMu.Lock()
+		e.cache[fileName] = records
+		e.cacheMu.Unlock()
+	}
 
 	return records, nil
 }

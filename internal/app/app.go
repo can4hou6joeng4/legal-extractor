@@ -233,6 +233,7 @@ func (a *App) ExportData(records []extractor.Record, outputPath string) ExtractR
 
 // PreviewData extracts and returns records for preview (without saving)
 func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
+	a.extractor.Logger().Info("收到预览请求", "path", inputPath)
 	// 检查试用期状态
 	status := config.GetTrialStatus()
 	if status.IsExpired {

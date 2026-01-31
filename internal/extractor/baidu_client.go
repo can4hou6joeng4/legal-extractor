@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/dslipak/pdf"
+	"github.com/pdfcpu/pdfcpu/pkg/api"
 )
 
 // BaiduClient 百度 AI Studio PaddleOCR 客户端
@@ -64,25 +65,30 @@ func (c *BaiduClient) ParseDocument(fileData []byte, isPdf bool, onProgress Prog
 			if totalPages > maxPagesPerChunk {
 				// 分块处理逻辑
 				for start := 1; start <= totalPages; start += maxPagesPerChunk {
-					end := min(start+maxPagesPerChunk-1, totalPages)
+					end := start + maxPagesPerChunk - 1
+					if end > totalPages {
+						end = totalPages
+					}
 
 					if onProgress != nil {
 						onProgress(start, totalPages)
 					}
 
-					// 注意：此处当前使用简化逻辑，若需要精确切片 PDF，可引入 pdfcpu.api.Trim
-					// 但由于百度接口目前对 PDF 支持良好，建议针对超长 PDF 在此提示或进行物理分割
-					// 为了保持逻辑鲁棒，我们先实现单次 100 页以内的精准调用，超出的部分进行截断或分批（暂以首 100 页为例，后续可扩展精准切片）
-					if start == 1 {
-						markdown, err := c.callBaiduAPI(fileData, true)
-						if err != nil {
-							return nil, err
-						}
-						allMarkdown.WriteString(markdown)
+					// 使用 pdfcpu 进行物理切片
+					var chunkBuffer bytes.Buffer
+					pageSelection := []string{fmt.Sprintf("%d-%d", start, end)}
+					err := api.Trim(bytes.NewReader(fileData), &chunkBuffer, pageSelection, nil)
+					if err != nil {
+						return nil, fmt.Errorf("PDF 切片失败 (页码 %d-%d): %w", start, end, err)
 					}
-					if start > 1 {
-						break // 目前先防止无限循环，后续可根据需要完善 PDF 物理切片逻辑
+
+					// 将物理切片后的数据发送给百度
+					markdown, err := c.callBaiduAPI(chunkBuffer.Bytes(), true)
+					if err != nil {
+						return nil, err
 					}
+					allMarkdown.WriteString(markdown)
+					allMarkdown.WriteString("\n\n")
 				}
 			} else {
 				markdown, err := c.callBaiduAPI(fileData, true)
