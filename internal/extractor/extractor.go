@@ -96,6 +96,13 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 // extractPdf 处理 PDF 提取（优先本地提取文本层）
 func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress ProgressCallback) ([]Record, error) {
 	e.logger.Info("正在解析 PDF 结构...", "bytes", len(fileData))
+
+	// 0. 如果配置了百度 Token，优先直接使用百度 OCR（跳过本地探测以提升速度）
+	if e.baiduClient.config.Token != "" {
+		e.logger.Info("检测到百度 Token，优先使用 [百度 PaddleOCR-VL] 引擎")
+		return e.baiduClient.ParseDocument(fileData, true, onProgress)
+	}
+
 	// 1. 获取总页数 (增加多库回退逻辑以提高鲁棒性)
 	totalPages := 1
 	e.logger.Debug("尝试使用 dslipak/pdf 获取页数")
@@ -143,7 +150,7 @@ func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress Prog
 	// 如果配置了百度 Token，则优先使用百度 PaddleOCR-VL (Layout Parsing)
 	if e.baiduClient.config.Token != "" {
 		e.logger.Info("使用 [百度 PaddleOCR-VL] 引擎进行解析")
-		return e.baiduClient.ParseDocument(fileData, true)
+		return e.baiduClient.ParseDocument(fileData, true, onProgress)
 	}
 
 	e.logger.Info("未配置百度 Token，回退至 [本地系统 OCR] 模式")
