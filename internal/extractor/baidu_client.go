@@ -61,7 +61,7 @@ func (c *BaiduClient) ParseDocument(fileData []byte, isPdf bool, onProgress Prog
 	}
 
 	// 1. 处理超长文档 (百度 API 限制单次 100 页)
-	var allMarkdown strings.Builder
+	var allPagesMarkdown []string
 	const maxPagesPerChunk = 50 // 调小切片粒度以提升大文件稳定性
 
 	if isPdf {
@@ -97,37 +97,49 @@ func (c *BaiduClient) ParseDocument(fileData []byte, isPdf bool, onProgress Prog
 					c.logger.Info("切片操作完成", "duration", time.Since(trimStart), "size", chunkBuffer.Len())
 
 					// 将物理切片后的数据发送给百度
-					markdown, err := c.callBaiduAPI(chunkBuffer.Bytes(), true)
+					pages, err := c.callBaiduAPI(chunkBuffer.Bytes(), true)
 					if err != nil {
 						c.logger.Error("百度 API 调用失败", "error", err, "pages", pageSelection)
 						return nil, err
 					}
-					allMarkdown.WriteString(markdown)
-					allMarkdown.WriteString("\n\n")
+					allPagesMarkdown = append(allPagesMarkdown, pages...)
 				}
 			} else {
-				markdown, err := c.callBaiduAPI(fileData, true)
+				pages, err := c.callBaiduAPI(fileData, true)
 				if err != nil {
 					return nil, err
 				}
-				allMarkdown.WriteString(markdown)
+				allPagesMarkdown = append(allPagesMarkdown, pages...)
 			}
 		}
 	} else {
-		markdown, err := c.callBaiduAPI(fileData, false)
+		pages, err := c.callBaiduAPI(fileData, false)
 		if err != nil {
 			return nil, err
 		}
-		allMarkdown.WriteString(markdown)
+		allPagesMarkdown = append(allPagesMarkdown, pages...)
 	}
 
-	// 2. 解析汇总后的 Markdown
-	c.logger.Info("所有页面解析完成，开始进行法律实体提取")
-	return ParseMarkdown(allMarkdown.String()), nil
+	// 2. 按页解析汇总后的 Markdown
+	c.logger.Info("所有页面识别完成，开始按页提取法律实体", "totalFetchedPages", len(allPagesMarkdown))
+	var allRecords []Record
+	for i, pageMd := range allPagesMarkdown {
+		records := ParseMarkdown(pageMd)
+		for _, rec := range records {
+			// 标注准确的页码
+			if rec["page"] == "" {
+				rec["page"] = fmt.Sprintf("%d", i+1)
+			}
+			allRecords = append(allRecords, rec)
+		}
+	}
+
+	c.logger.Info("数据提取完成", "recordCount", len(allRecords))
+	return allRecords, nil
 }
 
 // callBaiduAPI 封装底层的 API 调用逻辑
-func (c *BaiduClient) callBaiduAPI(fileData []byte, isPdf bool) (string, error) {
+func (c *BaiduClient) callBaiduAPI(fileData []byte, isPdf bool) ([]string, error) {
 	c.logger.Info("正在向百度 AI Studio 发送 POST 请求...")
 	fileBase64 := base64.StdEncoding.EncodeToString(fileData)
 	fileType := 1
@@ -145,12 +157,12 @@ func (c *BaiduClient) callBaiduAPI(fileData []byte, isPdf bool) (string, error) 
 
 	jsonBody, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", c.config.ApiUrl, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -159,24 +171,23 @@ func (c *BaiduClient) callBaiduAPI(fileData []byte, isPdf bool) (string, error) 
 	apiStart := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	c.logger.Info("百度 API 响应接收成功", "status", resp.Status, "duration", time.Since(apiStart))
 
 	var ocrResp BaiduOCRResponse
 	if err := json.NewDecoder(resp.Body).Decode(&ocrResp); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if ocrResp.ErrorCode != 0 {
-		return "", fmt.Errorf("百度 API 错误 (%d): %s", ocrResp.ErrorCode, ocrResp.ErrorMsg)
+		return nil, fmt.Errorf("百度 API 错误 (%d): %s", ocrResp.ErrorCode, ocrResp.ErrorMsg)
 	}
 
-	var sb strings.Builder
+	var pages []string
 	for _, result := range ocrResp.Result.LayoutParsingResults {
-		sb.WriteString(result.Markdown.Text)
-		sb.WriteString("\n\n") // 页间分隔
+		pages = append(pages, result.Markdown.Text)
 	}
-	return sb.String(), nil
+	return pages, nil
 }
