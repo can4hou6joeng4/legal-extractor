@@ -22,6 +22,7 @@ import (
 type Extractor struct {
 	logger        *slog.Logger
 	tencentClient *TencentClient
+	baiduClient   *BaiduClient
 	cache         map[string][]Record
 	cacheMu       sync.RWMutex
 }
@@ -34,6 +35,7 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 	return &Extractor{
 		logger:        logger,
 		tencentClient: NewTencentClient(),
+		baiduClient:   NewBaiduClient(),
 		cache:         make(map[string][]Record),
 	}
 }
@@ -86,21 +88,37 @@ func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []strin
 
 // extractPdf 处理 PDF 提取（优先本地提取文本层）
 func (e *Extractor) extractPdf(fileData []byte, fields []string, onProgress ProgressCallback) ([]Record, error) {
-	// 1. 获取总页数
+	// 1. 获取总页数 (增加多库回退逻辑以提高鲁棒性)
 	totalPages := 1
-	pageCount, err := api.PageCount(bytes.NewReader(fileData), nil)
+	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
 	if err == nil {
-		totalPages = pageCount
+		totalPages = r.NumPage()
+	} else {
+		// 回退到 pdfcpu
+		pageCount, err := api.PageCount(bytes.NewReader(fileData), nil)
+		if err == nil {
+			totalPages = pageCount
+		}
 	}
+
+	e.logger.Info("开始处理 PDF 文件", "totalPages", totalPages)
 
 	// 2. 探测第一页文本层
 	firstPageText, _ := e.extractPageTextLocally(fileData, 1)
 	if len(strings.TrimSpace(firstPageText)) > 20 {
-		e.logger.Info("检测到 PDF 文本层，切换至 [本地高速解析] 模式", "totalPages", totalPages)
+		e.logger.Info("检测到 PDF 文本层，切换至 [本地高速解析] 模式")
 		return e.batchExtractLocalPdf(fileData, fields, totalPages, onProgress)
 	}
 
-	e.logger.Info("未检测到 PDF 文本层或文本过少，切换至 [本地系统 OCR] 模式", "totalPages", totalPages)
+	e.logger.Info("未检测到 PDF 文本层或文本过少，切换至 [OCR 识别] 模式")
+
+	// 如果配置了百度 Token，则优先使用百度 PaddleOCR-VL (Layout Parsing)
+	if e.baiduClient.config.Token != "" {
+		e.logger.Info("使用 [百度 PaddleOCR-VL] 引擎进行解析")
+		return e.baiduClient.ParseDocument(fileData, true)
+	}
+
+	e.logger.Info("未配置百度 Token，回退至 [本地系统 OCR] 模式")
 	return e.extractViaWinOcr(fileData, totalPages, onProgress)
 }
 
@@ -112,43 +130,37 @@ func (e *Extractor) extractPageTextLocally(fileData []byte, pageNum int) (string
 	}
 
 	if pageNum > r.NumPage() {
-		return "", fmt.Errorf("页码超出范围")
+		return "", fmt.Errorf("页码 %d 超出范围 (总页数: %d)", pageNum, r.NumPage())
 	}
 
 	p := r.Page(pageNum)
-	if p.V.IsNull() {
-		return "", fmt.Errorf("页面内容为空")
-	}
-
 	text, _ := p.GetPlainText(nil)
 	return text, nil
 }
 
 // batchExtractLocalPdf 批量本地提取 PDF 文本层
 func (e *Extractor) batchExtractLocalPdf(fileData []byte, fields []string, totalPages int, onProgress ProgressCallback) ([]Record, error) {
-	r, err := pdf.NewReader(bytes.NewReader(fileData), int64(len(fileData)))
-	if err != nil {
-		return nil, err
-	}
-
 	var allRecords []Record
 	for i := 1; i <= totalPages; i++ {
 		if onProgress != nil {
 			onProgress(i, totalPages)
 		}
 
-		text, _ := r.Page(i).GetPlainText(nil)
-		if strings.TrimSpace(text) == "" {
+		text, err := e.extractPageTextLocally(fileData, i)
+		if err != nil || strings.TrimSpace(text) == "" {
 			continue
 		}
 
-		// 复用 parseCases 逻辑
+		// 针对 PDF 每页一份文书的场景，优化解析逻辑
 		pageRecords := e.parseCases(text, fields)
 		if len(pageRecords) > 0 {
 			for _, rec := range pageRecords {
 				rec["page"] = fmt.Sprintf("%d", i)
 				allRecords = append(allRecords, rec)
 			}
+		} else {
+			// 如果没匹配到 split，尝试直接匹配字段（作为保底）
+			e.logger.Debug("页面未匹配到分割符，尝试直接解析", "page", i)
 		}
 	}
 

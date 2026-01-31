@@ -205,7 +205,7 @@ func handleExtract(c echo.Context) error {
 	}
 
 	// 5. 调用核心提取逻辑
-	records, err := extractorInstance.ExtractData(fileData, file.Filename, fields)
+	records, err := extractorInstance.ExtractData(fileData, file.Filename, fields, nil)
 	if err != nil {
 		fmt.Printf("提取失败: %v\n", err)
 		return c.JSON(http.StatusInternalServerError, ExtractResponse{
