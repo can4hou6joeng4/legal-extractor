@@ -16,6 +16,8 @@ import (
 var (
 	// BuildTime is injected via -ldflags at build time (Unix timestamp)
 	BuildTime string = ""
+	// EmbeddedBaiduToken is injected via -ldflags at build time
+	EmbeddedBaiduToken string = ""
 )
 
 const TrialDurationDays = 7
@@ -72,17 +74,10 @@ var bakedConfig []byte
 
 // Config 应用配置结构
 type Config struct {
-	Tencent TencentConfig `mapstructure:"tencent"`
-	Baidu   BaiduConfig   `mapstructure:"baidu"`
+	Baidu BaiduConfig `mapstructure:"baidu"`
 }
 
-// TencentConfig 腾讯云 OCR 配置
-type TencentConfig struct {
-	SecretId  string `mapstructure:"secret_id"`
-	SecretKey string `mapstructure:"secret_key"`
-}
-
-// BaiduConfig 百度 AI Studio OCR 配置
+// BaiduConfig 百度 OCR 配置
 type BaiduConfig struct {
 	Token  string `mapstructure:"token"`
 	ApiUrl string `mapstructure:"api_url"`
@@ -108,9 +103,7 @@ func Init(configPath string) error {
 	}
 
 	// 设置默认值
-	v.SetDefault("tencent.secret_id", "")
-	v.SetDefault("tencent.secret_key", "")
-	v.SetDefault("baidu.token", "")
+	v.SetDefault("baidu.token", EmbeddedBaiduToken)
 	v.SetDefault("baidu.api_url", "https://n1544et5uec1tbh9.aistudio-app.com/layout-parsing")
 
 	// 绑定环境变量 (前缀 LEGAL_EXTRACTOR_)
@@ -143,9 +136,9 @@ func Init(configPath string) error {
 			return fmt.Errorf("读取配置文件失败: %w", err)
 		}
 	} else {
-		// 文件读取成功，检查是否为空配置
-		if v.GetString("tencent.secret_id") == "" {
-			fmt.Println("[ℹ️ 提示] 本地配置未设置腾讯云密钥，尝试加载内置配置...")
+		// 文件读取成功，检查是否为空配置且无内置 Token
+		if v.GetString("baidu.token") == "" && EmbeddedBaiduToken == "" {
+			fmt.Println("[ℹ️ 提示] 未检测到百度云密钥，尝试加载内置配置...")
 			useBaked = true
 		}
 	}
@@ -161,7 +154,7 @@ func Init(configPath string) error {
 	}
 
 	// 如果最终密钥仍然为空，且之前是因为文件不存在才进来的，则创建默认模板
-	if v.GetString("tencent.secret_id") == "" {
+	if v.GetString("baidu.token") == "" && EmbeddedBaiduToken == "" {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			defaultPath := filepath.Join(baseDir, "config", "conf.yaml")
 			if createErr := ensureConfigFile(defaultPath); createErr != nil {
@@ -176,15 +169,6 @@ func Init(configPath string) error {
 	cfg = &Config{}
 	if err := v.Unmarshal(cfg); err != nil {
 		return fmt.Errorf("解析配置失败: %w", err)
-	}
-
-	// 检查关键配置是否为空，给出明确指引
-	if cfg.Tencent.SecretId == "" || cfg.Tencent.SecretKey == "" {
-		exePath, _ := os.Executable()
-		absConfigPath := filepath.Join(filepath.Dir(exePath), "config", "conf.yaml")
-		fmt.Printf("\n[⚠️ 配置提示] 未检测到有效的腾讯云 API 密钥。\n")
-		fmt.Printf("请编辑配置文件: %s\n", absConfigPath)
-		fmt.Printf("申请教程详见文档: https://github.com/can4hou6joeng4/legal-extractor/blob/main/docs/user/CONFIG_GUIDE.md\n\n")
 	}
 
 	return nil
@@ -212,11 +196,7 @@ func ensureConfigFile(configPath string) error {
 	// 写入默认配置
 	defaultConfig := `# Legal Extractor 配置文件
 # 支持通过环境变量覆盖，前缀为 LEGAL_EXTRACTOR_
-# 例如: LEGAL_EXTRACTOR_TENCENT_SECRET_ID=xxx
-
-tencent:
-  secret_id: ""  # 腾讯云 SecretId
-  secret_key: "" # 腾讯云 SecretKey
+# 例如: LEGAL_EXTRACTOR_BAIDU_TOKEN=xxx
 
 baidu:
   token: ""      # 百度 AI Studio Token
@@ -231,14 +211,6 @@ func Get() *Config {
 		return &Config{}
 	}
 	return cfg
-}
-
-// GetTencent 获取腾讯云配置
-func GetTencent() TencentConfig {
-	if cfg == nil {
-		return TencentConfig{}
-	}
-	return cfg.Tencent
 }
 
 // GetBaidu 获取百度配置

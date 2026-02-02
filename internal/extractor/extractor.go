@@ -25,11 +25,10 @@ import (
 
 // Extractor 处理器，负责协调不同格式的提取策略
 type Extractor struct {
-	logger        *slog.Logger
-	tencentClient *TencentClient
-	baiduClient   *BaiduClient
-	cache         map[string][]Record
-	cacheMu       sync.RWMutex
+	logger      *slog.Logger
+	baiduClient *BaiduClient
+	cache       map[string][]Record
+	cacheMu     sync.RWMutex
 }
 
 // NewExtractor 创建一个新的提取器实例
@@ -38,10 +37,9 @@ func NewExtractor(logger *slog.Logger) *Extractor {
 		logger = slog.Default()
 	}
 	return &Extractor{
-		logger:        logger,
-		tencentClient: NewTencentClient(),
-		baiduClient:   NewBaiduClient(logger),
-		cache:         make(map[string][]Record),
+		logger:      logger,
+		baiduClient: NewBaiduClient(logger),
+		cache:       make(map[string][]Record),
 	}
 }
 
