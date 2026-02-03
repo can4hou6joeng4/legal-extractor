@@ -62,9 +62,9 @@ jobs:
           npm run build
           cd ..
 
-          # 注入构建时间戳并构建原生应用
+          # 注入构建时间戳并构建原生应用 (-a 强制重新编译，避免缓存导致时间戳失效)
           BUILD_TIME=$(date +%s)
-          wails build -platform ${{ matrix.platform }} -s -ldflags "-X 'legal-extractor/internal/config.BuildTime=$BUILD_TIME'"
+          wails build -platform ${{ matrix.platform }} -s -a -ldflags "-X 'legal-extractor/internal/config.BuildTime=$BUILD_TIME'"
 
       - name: Create DMG (Manual Method)
         run: |
@@ -164,9 +164,9 @@ jobs:
           npm run build
           cd ..
 
-          # 注入构建时间戳并构建原生应用
+          # 注入构建时间戳并构建原生应用 (-a 强制重新编译，避免缓存导致时间戳失效)
           $BUILD_TIME = [int][double]::Parse((Get-Date -UFormat %s))
-          wails build -platform windows/amd64 -s -ldflags "-X 'legal-extractor/internal/config.BuildTime=$BUILD_TIME'"
+          wails build -platform windows/amd64 -s -a -ldflags "-X 'legal-extractor/internal/config.BuildTime=$BUILD_TIME'"
 
       - name: Package Windows
         shell: powershell
