@@ -2,10 +2,10 @@
   <img src="build/appicon.png" alt="Legal Extractor Logo" width="120" height="120">
 </p>
 
-<h1 align="center">Legal Document Extractor v2.1.4</h1>
+<h1 align="center">Legal Document Extractor v3.0.0</h1>
 
 <p align="center">
-  <strong>Intelligent information extraction from legal documents with one-click structured export</strong>
+  <strong>Next-Gen intelligent information extraction from legal documents with high-performance OCR</strong>
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.4-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/Version-3.0.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go Version">
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?style=flat-square&logo=vue.js" alt="Vue Version">
   <img src="https://img.shields.io/badge/Wails-2.x-DF0000?style=flat-square" alt="Wails Version">
@@ -24,14 +24,14 @@
 
 ## ✨ Features
 
-- 📄 **Smart Parsing** - Auto-detect structure of `.docx` and `.pdf` legal documents
-- 🎯 **Precise Extraction** - Extract key fields like defendant, ID, requests, and facts
-- 🌐 **Web & Desktop** - Dual-mode architecture supporting both Native Desktop (Wails) and Web Browser (Docker)
-- 👁️ **Live Preview** - Preview data before extraction to ensure accuracy
-- 💾 **Multi-format Export** - Support Excel (.xlsx), CSV, and JSON
-- 🚀 **REST API** - Provide standard HTTP API for file extraction and export
-- 🐳 **Docker Ready** - Built-in Docker support for easy deployment
-- 🎨 **Modern UI** - Dark theme with Glassmorphism design
+- 🚀 **v3.0 Next-Gen Engine** - Powered by Baidu AI Studio for high-precision legal document analysis.
+- 📄 **Smart Parsing** - Auto-detect structure of `.docx` and `.pdf` legal documents.
+- ⚡ **Parallel Processing** - 300% faster text extraction using Go Goroutines.
+- 🎯 **Precise Extraction** - Extract key fields like defendant, ID, requests, and facts.
+- 🧩 **Physical Slicing** - Support for 50+ pages long PDF documents.
+- 👁️ **Live Preview** - Preview data before extraction to ensure accuracy.
+- 💾 **Multi-format Export** - Support Excel (.xlsx), CSV, and JSON.
+- 🐳 **Docker Ready** - Built-in Docker support for easy deployment.
 
 ---
 
@@ -119,21 +119,18 @@ For full stack development with hot reload:
 
 ### Baidu OCR (Required for PDF/Image)
 
-The project uses Baidu PaddleOCR-VL for high-precision document analysis.
+The project uses Baidu AI Studio (PaddleOCR-VL) for high-precision document analysis.
 
-📖 **[Read the Full Configuration Guide](docs/user/CONFIG_GUIDE.md)** for detailed instructions on how to get your API keys.
+📖 **[Read the Full Configuration Guide](docs/user/CONFIG_GUIDE.md)**
 
-**Option 1: Environment Variables (Recommended for Docker)**
-- `LEGAL_EXTRACTOR_BAIDU_API_KEY`
-- `LEGAL_EXTRACTOR_BAIDU_SECRET_KEY`
+**Option 1: Environment Variables**
+- `BAIDU_TOKEN` (Access Token for Baidu Cloud)
 
 **Option 2: Configuration File**
-Create `config/conf.yaml` in the root directory:
-
+Create `internal/config/baked_conf.yaml`:
 ```yaml
 baidu:
-  api_key: "your_api_key"
-  secret_key: "your_secret_key"
+  token: "your_baidu_token"
 ```
 
 ---

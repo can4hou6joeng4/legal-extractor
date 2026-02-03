@@ -2,10 +2,10 @@
   <img src="build/appicon.png" alt="Legal Extractor Logo" width="120" height="120">
 </p>
 
-<h1 align="center">法律文书提取器 (Legal Document Extractor) v2.1.4</h1>
+<h1 align="center">法律文书提取器 (Legal Document Extractor) v3.0.0</h1>
 
 <p align="center">
-  <strong>从法律文书中智能提取关键信息，一键导出为结构化数据</strong>
+  <strong>新一代法律文书智能提取工具，基于高性能 OCR 与并行解析引擎</strong>
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.1.4-blue?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/Version-3.0.0-blue?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go Version">
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?style=flat-square&logo=vue.js" alt="Vue Version">
   <img src="https://img.shields.io/badge/Wails-2.x-DF0000?style=flat-square" alt="Wails Version">
@@ -24,14 +24,14 @@
 
 ## ✨ 功能特性
 
-- 📄 **智能解析** - 自动识别 `.docx` 和 `.pdf` 格式的法律文书结构
-- 🎯 **精准提取** - 提取被告、身份证号码、诉讼请求、事实与理由等关键字段
-- 🌐 **双模架构** - 同时支持原生桌面应用 (Wails) 和 Web 浏览器应用 (Docker)
-- 👁️ **实时预览** - 提取前可预览数据，确保准确性
-- 💾 **多格式导出** - 支持 Excel (.xlsx), CSV, JSON 格式导出
-- 🚀 **REST API** - 提供标准 HTTP API 接口，支持文件上传与数据提取
-- 🐳 **Docker 支持** - 内置 Docker 镜像，支持一键私有化部署
-- 🎨 **现代界面** - 暗色主题 + 玻璃拟态设计
+- 🚀 **v3.0 新一代引擎** - 全面接入百度 AI Studio 高性能模型，识别精度大幅提升。
+- 📄 **智能解析** - 自动识别 `.docx` 和 `.pdf` 格式的法律文书结构。
+- ⚡ **并行提取** - 引入 Go 协程并发处理，本地文本解析速度提升 **300%**。
+- 🎯 **精准提取** - 提取被告、身份证号码、诉讼请求、事实与理由等关键字段。
+- 🧩 **物理切片** - 支持 50 页以上超长 PDF 文档的自动分片识别。
+- 👁️ **实时预览** - 提取前可预览数据，确保准确性。
+- 💾 **多格式导出** - 支持 Excel (.xlsx), CSV, JSON 格式导出。
+- 🐳 **Docker 支持** - 内置 Docker 镜像，支持一键私有化部署。
 
 ---
 
@@ -119,21 +119,18 @@ wails dev
 
 ### 百度 OCR (PDF/图片必须)
 
-本项目集成了百度 PaddleOCR-VL 大模型版面分析 API，用于处理复杂的 PDF 和扫描件。
+本项目接入了百度 AI Studio (PaddleOCR-VL) 大模型，用于处理复杂的 PDF 和扫描件。
 
-📖 **[点击查看详细配置指南](docs/user/CONFIG_GUIDE.md)** 了解如何获取 API 密钥。
+📖 **[点击查看详细配置指南](docs/user/CONFIG_GUIDE.md)**
 
-**方式 1: 环境变量 (推荐 Docker 使用)**
-- `LEGAL_EXTRACTOR_BAIDU_API_KEY`
-- `LEGAL_EXTRACTOR_BAIDU_SECRET_KEY`
+**方式 1: 环境变量**
+- `BAIDU_TOKEN` (百度云访问令牌)
 
 **方式 2: 配置文件**
-在项目根目录下创建 `config/conf.yaml` 文件：
-
+在 `internal/config/baked_conf.yaml` 中配置：
 ```yaml
 baidu:
-  api_key: "您的API_KEY"
-  secret_key: "您的SECRET_KEY"
+  token: "您的百度Token"
 ```
 
 ---
