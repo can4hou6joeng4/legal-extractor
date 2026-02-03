@@ -52,7 +52,7 @@ func (e *Extractor) Logger() *slog.Logger {
 type Record map[string]string
 
 // ProgressCallback 进度回调函数
-type ProgressCallback func(current, total int)
+type ProgressCallback func(current, total int, message string)
 
 // ExtractData 根据文件类型选择提取策略
 func (e *Extractor) ExtractData(fileData []byte, fileName string, fields []string, onProgress ProgressCallback) ([]Record, error) {
@@ -252,7 +252,7 @@ func (e *Extractor) batchExtractLocalPdf(fileData []byte, fields []string, total
 	for res := range results {
 		processedCount++
 		if onProgress != nil {
-			onProgress(processedCount, totalPages)
+			onProgress(processedCount, totalPages, "正在进行文本层逻辑分析...")
 		}
 		if len(res.records) > 0 {
 			allPageResults = append(allPageResults, res)
@@ -357,7 +357,7 @@ func (e *Extractor) extractViaWinOcr(fileData []byte, totalPages int, onProgress
 	for res := range results {
 		processed++
 		if onProgress != nil {
-			onProgress(processed, totalPages)
+			onProgress(processed, totalPages, fmt.Sprintf("正在调用系统识别引擎提取第 %d 页内容...", res.pageNum))
 		}
 		if len(res.records) > 0 {
 			allPageResults = append(allPageResults, res)

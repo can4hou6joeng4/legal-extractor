@@ -169,10 +169,11 @@ func (a *App) ExtractToPath(inputPath, outputPath string, fields []string) Extra
 	}
 
 	// 1. Extract Data
-	records, err := a.extractor.ExtractData(fileData, inputPath, fields, func(current, total int) {
-		wr.EventsEmit(a.ctx, "extraction_progress", map[string]int{
+	records, err := a.extractor.ExtractData(fileData, inputPath, fields, func(current, total int, message string) {
+		wr.EventsEmit(a.ctx, "extraction_progress", map[string]interface{}{
 			"current": current,
 			"total":   total,
+			"message": message,
 		})
 	})
 	if err != nil {
@@ -267,10 +268,11 @@ func (a *App) PreviewData(inputPath string, fields []string) ExtractResult {
 		}
 	}
 
-	records, err := a.extractor.ExtractData(fileData, inputPath, fields, func(current, total int) {
-		wr.EventsEmit(a.ctx, "extraction_progress", map[string]int{
+	records, err := a.extractor.ExtractData(fileData, inputPath, fields, func(current, total int, message string) {
+		wr.EventsEmit(a.ctx, "extraction_progress", map[string]interface{}{
 			"current": current,
 			"total":   total,
+			"message": message,
 		})
 	})
 	if err != nil {

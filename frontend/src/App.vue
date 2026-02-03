@@ -58,6 +58,8 @@ const notification = ref<{
   type: "success" | "error" | "info";
 } | null>(null);
 
+const progressPercent = ref(0);
+
 // Actions
 async function fetchTrialStatus() {
   try {
@@ -85,6 +87,7 @@ async function handleActivate() {
 
   loadingText.value = "正在验证授权...";
   isLoading.value = true;
+  progressPercent.value = 0;
 
   // 5. 强制延迟 500ms 确保 Loading 动画渲染出来，避免被系统弹窗（如权限请求）打断渲染
   await new Promise(resolve => setTimeout(resolve, 500));
@@ -123,8 +126,9 @@ onMounted(() => {
   fetchTrialStatus();
 
   // 监听提取进度
-  EventsOn("extraction_progress", (data: { current: number; total: number }) => {
-    loadingText.value = `正在识别第 ${data.current} / ${data.total} 页...`;
+  EventsOn("extraction_progress", (data: { current: number; total: number; message: string }) => {
+    progressPercent.value = Math.round((data.current / data.total) * 100);
+    loadingText.value = data.message;
   });
 });
 
@@ -318,20 +322,20 @@ function handleFieldsChange(fields: string[]) {
     <!-- Loading Overlay -->
     <Transition name="fade">
       <div v-if="isLoading" class="loading-overlay">
-        <div class="loading-spinner">
-          <svg class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-          </svg>
-        </div>
-        <div class="loading-content">
-          <h3 class="loading-title">正在处理中...</h3>
-          <p class="loading-desc" v-if="loadingText">{{ loadingText }}</p>
-          <template v-else>
-            <p class="loading-desc" v-if="fileName.toLowerCase().endsWith('.pdf')">
-              正在进行文档智能解析，请稍候...
-            </p>
-            <p class="loading-desc" v-else>正在解析本地文档结构...</p>
-          </template>
+        <div class="loading-card glass-panel">
+          <div class="progress-container">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+            </div>
+            <div class="progress-info">
+              <span class="progress-label">当前进度</span>
+              <span class="progress-value">{{ progressPercent }}%</span>
+            </div>
+          </div>
+          <div class="loading-content">
+            <h3 class="loading-title">正在处理中</h3>
+            <p class="loading-desc">{{ loadingText || (fileName.toLowerCase().endsWith('.pdf') ? '正在进行文档智能解析...' : '正在解析本地文档结构...') }}</p>
+          </div>
         </div>
       </div>
     </Transition>
@@ -903,33 +907,86 @@ function handleFieldsChange(fields: string[]) {
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.8);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   z-index: 5500;
-  gap: 20px;
 }
 
-.loading-spinner {
-  color: var(--accent-primary);
-}
-
-.loading-content {
+.loading-card {
+  width: 90%;
+  max-width: 400px;
+  padding: 32px;
+  border-radius: 24px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
   text-align: center;
 }
 
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary), #38bdf8);
+  border-radius: var(--radius-full);
+  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 15px rgba(14, 165, 233, 0.4);
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.progress-label {
+  color: var(--text-secondary);
+}
+
+.progress-value {
+  color: var(--accent-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .loading-title {
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-bottom: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
 }
 
 .loading-desc {
   color: var(--text-secondary);
   font-size: 0.9rem;
+  line-height: 1.5;
+  min-height: 1.4em; /* Prevent layout jump */
 }
 </style>
