@@ -45,6 +45,7 @@ jobs:
         env:
           TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
           TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+          BAIDU_TOKEN: ${{ secrets.BAIDU_TOKEN }}
         run: |
           # 从 GitHub Secrets 生成嵌入配置
           mkdir -p internal/config
@@ -52,6 +53,8 @@ jobs:
           tencent:
             secret_id: "${TENCENT_SECRET_ID}"
             secret_key: "${TENCENT_SECRET_KEY}"
+          baidu:
+            token: "${BAIDU_TOKEN}"
           EOF
 
           cd frontend
@@ -144,6 +147,7 @@ jobs:
         env:
           TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
           TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+          BAIDU_TOKEN: ${{ secrets.BAIDU_TOKEN }}
         run: |
           # 从 GitHub Secrets 生成嵌入配置
           New-Item -ItemType Directory -Path "internal/config" -Force | Out-Null
@@ -151,6 +155,8 @@ jobs:
           tencent:
             secret_id: "$env:TENCENT_SECRET_ID"
             secret_key: "$env:TENCENT_SECRET_KEY"
+          baidu:
+            token: "$env:BAIDU_TOKEN"
           "@ | Out-File -FilePath "internal/config/baked_conf.yaml" -Encoding UTF8
 
           cd frontend
